@@ -689,6 +689,164 @@ function RedisKeyBrowser() {
   )
 }
 
+interface PatternDetailModalProps {
+  pattern: Pattern
+  onClose: () => void
+  onEdit: (pattern: Pattern) => void
+  onDelete: (patternId: string) => void
+  processorId: string
+}
+
+function PatternDetailModal({ pattern, onClose, onEdit, onDelete, processorId }: PatternDetailModalProps) {
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        {/* Header */}
+        <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex items-start justify-between">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                Pattern Details
+              </h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Processor: {processorId}
+              </p>
+            </div>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 space-y-6">
+          {/* Pattern ID */}
+          <div>
+            <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
+              Pattern ID
+            </label>
+            <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3">
+              <code className="text-sm text-gray-900 dark:text-white font-mono break-all">
+                {pattern._id}
+              </code>
+            </div>
+          </div>
+
+          {/* Pattern Text */}
+          <div>
+            <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
+              Pattern
+            </label>
+            <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3">
+              <p className="text-gray-900 dark:text-white">{pattern.pattern}</p>
+            </div>
+          </div>
+
+          {/* Metrics Grid */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
+                Frequency
+              </label>
+              <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3">
+                <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                  {pattern.frequency}
+                </p>
+              </div>
+            </div>
+
+            {pattern.confidence !== undefined && (
+              <div>
+                <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
+                  Confidence
+                </label>
+                <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3">
+                  <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                    {pattern.confidence}%
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Last Seen */}
+          {pattern.last_seen && (
+            <div>
+              <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
+                Last Seen
+              </label>
+              <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3">
+                <p className="text-gray-900 dark:text-white">
+                  {new Date(pattern.last_seen).toLocaleString()}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Additional Fields */}
+          {Object.keys(pattern).filter(key =>
+            !['_id', 'pattern', 'frequency', 'confidence', 'last_seen'].includes(key)
+          ).length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
+                Additional Fields
+              </label>
+              <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3">
+                <pre className="text-xs text-gray-900 dark:text-white overflow-auto">
+                  {JSON.stringify(
+                    Object.fromEntries(
+                      Object.entries(pattern).filter(([key]) =>
+                        !['_id', 'pattern', 'frequency', 'confidence', 'last_seen'].includes(key)
+                      )
+                    ),
+                    null,
+                    2
+                  )}
+                </pre>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex gap-3">
+          <button
+            onClick={() => {
+              onEdit(pattern)
+              onClose()
+            }}
+            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+          >
+            <Edit className="w-4 h-4" />
+            Edit Pattern
+          </button>
+          <button
+            onClick={() => {
+              onDelete(pattern._id)
+              onClose()
+            }}
+            className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
+          >
+            <Trash2 className="w-4 h-4" />
+            Delete Pattern
+          </button>
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-gray-300 dark:bg-gray-600 text-gray-900 dark:text-white rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function Databases() {
   const [selectedTab, setSelectedTab] = useState<'mongodb' | 'qdrant' | 'redis'>('mongodb')
   const [selectedProcessor, setSelectedProcessor] = useState<string | null>(null)
@@ -700,6 +858,7 @@ export default function Databases() {
   const [selectedCollections, setSelectedCollections] = useState<Set<string>>(new Set())
   const [selectedProcessors, setSelectedProcessors] = useState<Set<string>>(new Set())
   const [showCollections, setShowCollections] = useState(false)
+  const [selectedPatternForDetails, setSelectedPatternForDetails] = useState<Pattern | null>(null)
   const pageSize = 20
   const queryClient = useQueryClient()
 
@@ -1429,118 +1588,110 @@ export default function Databases() {
                       </div>
 
                       {/* Pattern Rows */}
-                      <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                      <div className="max-h-[600px] overflow-y-auto divide-y divide-gray-200 dark:divide-gray-700">
                         {filteredPatterns.map((pattern) => (
-                        <div key={pattern._id} className="p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                          <div className="flex items-start gap-3">
-                            {/* Checkbox */}
-                            <button
-                              onClick={() => handleTogglePattern(pattern._id)}
-                              className="mt-1 text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 flex-shrink-0"
-                              disabled={editingPattern?._id === pattern._id}
-                            >
-                              {selectedPatterns.has(pattern._id) ? (
-                                <CheckSquare className="w-5 h-5" />
-                              ) : (
-                                <Square className="w-5 h-5" />
-                              )}
-                            </button>
-
-                            {/* Pattern Content */}
-                            <div className="flex-1">
-                              {editingPattern?._id === pattern._id ? (
-                                /* Edit Mode */
-                                <div className="space-y-3">
+                        <div key={pattern._id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                          {editingPattern?._id === pattern._id ? (
+                            /* Edit Mode */
+                            <div className="p-4">
+                              <div className="space-y-3">
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Pattern
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={editFormData.pattern || ''}
+                                    onChange={(e) => setEditFormData({ ...editFormData, pattern: e.target.value })}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                                  />
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
                                   <div>
                                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                      Pattern
+                                      Frequency
                                     </label>
                                     <input
-                                      type="text"
-                                      value={editFormData.pattern || ''}
-                                      onChange={(e) => setEditFormData({ ...editFormData, pattern: e.target.value })}
+                                      type="number"
+                                      value={editFormData.frequency || 0}
+                                      onChange={(e) => setEditFormData({ ...editFormData, frequency: parseInt(e.target.value) })}
                                       className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                                     />
                                   </div>
-                                  <div className="grid grid-cols-2 gap-3">
-                                    <div>
-                                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                        Frequency
-                                      </label>
-                                      <input
-                                        type="number"
-                                        value={editFormData.frequency || 0}
-                                        onChange={(e) => setEditFormData({ ...editFormData, frequency: parseInt(e.target.value) })}
-                                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                                      />
-                                    </div>
-                                    <div>
-                                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                        Confidence
-                                      </label>
-                                      <input
-                                        type="number"
-                                        step="0.1"
-                                        value={editFormData.confidence || 0}
-                                        onChange={(e) => setEditFormData({ ...editFormData, confidence: parseFloat(e.target.value) })}
-                                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                                      />
-                                    </div>
-                                  </div>
-                                  <div className="flex gap-2">
-                                    <button
-                                      onClick={handleUpdate}
-                                      disabled={updateMutation.isPending}
-                                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                                    >
-                                      Save
-                                    </button>
-                                    <button
-                                      onClick={handleCancelEdit}
-                                      className="px-4 py-2 bg-gray-300 dark:bg-gray-600 text-gray-900 dark:text-white rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500"
-                                    >
-                                      Cancel
-                                    </button>
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                      Confidence
+                                    </label>
+                                    <input
+                                      type="number"
+                                      step="0.1"
+                                      value={editFormData.confidence || 0}
+                                      onChange={(e) => setEditFormData({ ...editFormData, confidence: parseFloat(e.target.value) })}
+                                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                                    />
                                   </div>
                                 </div>
-                              ) : (
-                                /* View Mode */
-                                <div className="flex items-start justify-between">
-                                  <div className="flex-1">
-                                    <div className="font-medium text-gray-900 dark:text-white mb-1">
-                                      {pattern.pattern}
-                                    </div>
-                                    <div className="flex gap-4 text-sm text-gray-600 dark:text-gray-400">
-                                      <span>Frequency: {pattern.frequency}</span>
-                                      {pattern.confidence !== undefined && (
-                                        <span>Confidence: {pattern.confidence}%</span>
-                                      )}
-                                      {pattern.last_seen && (
-                                        <span>Last seen: {new Date(pattern.last_seen).toLocaleDateString()}</span>
-                                      )}
-                                    </div>
-                                  </div>
-                                  <div className="flex gap-2">
-                                    <button
-                                      onClick={() => handleEdit(pattern)}
-                                      className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
-                                      title="Edit Pattern"
-                                    >
-                                      <Edit className="w-4 h-4" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleDelete(pattern._id)}
-                                      disabled={deleteMutation.isPending}
-                                      className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 disabled:opacity-50"
-                                      title="Delete Pattern"
-                                    >
-                                      <Trash2 className="w-4 h-4" />
-                                    </button>
-                                  </div>
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={handleUpdate}
+                                    disabled={updateMutation.isPending}
+                                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                                  >
+                                    Save
+                                  </button>
+                                  <button
+                                    onClick={handleCancelEdit}
+                                    className="px-4 py-2 bg-gray-300 dark:bg-gray-600 text-gray-900 dark:text-white rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500"
+                                  >
+                                    Cancel
+                                  </button>
                                 </div>
-                              )}
+                              </div>
                             </div>
-                          </div>
+                          ) : (
+                            /* View Mode - Clickable Row */
+                            <div className="flex items-center gap-3 p-4">
+                              {/* Checkbox */}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleTogglePattern(pattern._id)
+                                }}
+                                className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 flex-shrink-0"
+                              >
+                                {selectedPatterns.has(pattern._id) ? (
+                                  <CheckSquare className="w-5 h-5" />
+                                ) : (
+                                  <Square className="w-5 h-5" />
+                                )}
+                              </button>
+
+                              {/* Clickable Pattern Content */}
+                              <button
+                                onClick={() => setSelectedPatternForDetails(pattern)}
+                                className="flex-1 text-left flex items-center justify-between group"
+                              >
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-semibold text-gray-900 dark:text-white mb-1 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                                    {pattern.pattern}
+                                  </div>
+                                  <div className="flex gap-4 text-sm text-gray-600 dark:text-gray-400">
+                                    <span className="flex items-center gap-1">
+                                      <span className="font-medium">Frequency:</span>
+                                      <span className="text-blue-600 dark:text-blue-400 font-semibold">{pattern.frequency}</span>
+                                    </span>
+                                    {pattern.confidence !== undefined && (
+                                      <span className="flex items-center gap-1">
+                                        <span className="font-medium">Confidence:</span>
+                                        <span className="text-green-600 dark:text-green-400 font-semibold">{pattern.confidence}%</span>
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors flex-shrink-0 ml-2" />
+                              </button>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -1574,6 +1725,23 @@ export default function Databases() {
             )}
           </div>
         </div>
+      )}
+
+      {/* Pattern Detail Modal */}
+      {selectedPatternForDetails && selectedProcessor && (
+        <PatternDetailModal
+          pattern={selectedPatternForDetails}
+          processorId={selectedProcessor}
+          onClose={() => setSelectedPatternForDetails(null)}
+          onEdit={(pattern) => {
+            handleEdit(pattern)
+            setSelectedPatternForDetails(null)
+          }}
+          onDelete={(patternId) => {
+            handleDelete(patternId)
+            setSelectedPatternForDetails(null)
+          }}
+        />
       )}
 
       {/* Qdrant Tab */}
