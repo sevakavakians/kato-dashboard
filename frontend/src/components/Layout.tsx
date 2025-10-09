@@ -1,15 +1,44 @@
 import { Outlet, Link, useLocation } from 'react-router-dom'
-import { Activity, Database, BarChart3, Users } from 'lucide-react'
+import { Activity, Database, BarChart3, Users, Box, Wifi, WifiOff } from 'lucide-react'
+import { useWebSocketStatus } from '../hooks/useWebSocket'
 
 export default function Layout() {
   const location = useLocation()
+  const { status, isConnected } = useWebSocketStatus()
 
   const navigation = [
     { name: 'Dashboard', href: '/', icon: Activity },
     { name: 'Sessions', href: '/sessions', icon: Users },
     { name: 'Databases', href: '/databases', icon: Database },
+    { name: 'Vectors', href: '/vectors', icon: Box },
     { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   ]
+
+  const getStatusColor = () => {
+    switch (status) {
+      case 'connected':
+        return 'text-green-500'
+      case 'connecting':
+        return 'text-yellow-500'
+      case 'error':
+        return 'text-red-500'
+      default:
+        return 'text-gray-500'
+    }
+  }
+
+  const getStatusText = () => {
+    switch (status) {
+      case 'connected':
+        return 'Real-time'
+      case 'connecting':
+        return 'Connecting...'
+      case 'error':
+        return 'Connection Error'
+      default:
+        return 'Offline'
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -58,6 +87,17 @@ export default function Layout() {
 
           {/* Footer */}
           <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700">
+            {/* Connection Status */}
+            <div className="flex items-center gap-2 mb-3">
+              {isConnected ? (
+                <Wifi className={`w-4 h-4 ${getStatusColor()}`} />
+              ) : (
+                <WifiOff className={`w-4 h-4 ${getStatusColor()}`} />
+              )}
+              <span className={`text-xs font-medium ${getStatusColor()}`}>
+                {getStatusText()}
+              </span>
+            </div>
             <p className="text-xs text-gray-500 dark:text-gray-400">
               Version 1.0.0
             </p>

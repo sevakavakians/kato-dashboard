@@ -156,3 +156,187 @@ async def get_processor_collections() -> List[Dict[str, Any]]:
         coll['processor_id'] = coll['name'].replace('vectors_', '')
 
     return processor_collections
+
+
+async def scroll_points(
+    collection_name: str,
+    limit: int = 100,
+    offset: Optional[str] = None,
+    with_vectors: bool = False,
+    with_payload: bool = True
+) -> Dict[str, Any]:
+    """
+    Scroll through points in a collection with pagination
+
+    Args:
+        collection_name: Name of the collection
+        limit: Maximum number of points to return
+        offset: Offset ID for pagination
+        with_vectors: Include vector data in results
+        with_payload: Include payload data in results
+
+    Returns:
+        Dict with points and next_offset for pagination
+    """
+    client = get_qdrant_client()
+
+    try:
+        result = client.scroll(
+            collection_name=collection_name,
+            limit=limit,
+            offset=offset,
+            with_vectors=with_vectors,
+            with_payload=with_payload
+        )
+
+        points, next_offset = result
+
+        return {
+            'points': [
+                {
+                    'id': point.id,
+                    'payload': point.payload if with_payload else None,
+                    'vector': point.vector if with_vectors else None
+                }
+                for point in points
+            ],
+            'next_offset': next_offset,
+            'count': len(points)
+        }
+    except Exception as e:
+        logger.error(f"Failed to scroll points in {collection_name}: {e}")
+        return {'points': [], 'next_offset': None, 'count': 0}
+
+
+async def get_point(
+    collection_name: str,
+    point_id: str,
+    with_vectors: bool = True,
+    with_payload: bool = True
+) -> Optional[Dict[str, Any]]:
+    """
+    Get a specific point by ID
+
+    Args:
+        collection_name: Name of the collection
+        point_id: ID of the point to retrieve
+        with_vectors: Include vector data
+        with_payload: Include payload data
+
+    Returns:
+        Point data or None if not found
+    """
+    client = get_qdrant_client()
+
+    try:
+        points = client.retrieve(
+            collection_name=collection_name,
+            ids=[point_id],
+            with_vectors=with_vectors,
+            with_payload=with_payload
+        )
+
+        if not points:
+            return None
+
+        point = points[0]
+        return {
+            'id': point.id,
+            'payload': point.payload if with_payload else None,
+            'vector': point.vector if with_vectors else None
+        }
+    except Exception as e:
+        logger.error(f"Failed to get point {point_id} from {collection_name}: {e}")
+        return None
+
+
+async def search_similar_points(
+    collection_name: str,
+    point_id: str,
+    limit: int = 10,
+    score_threshold: Optional[float] = None
+) -> List[Dict[str, Any]]:
+    """
+    Find points similar to a given point
+
+    Args:
+        collection_name: Name of the collection
+        point_id: ID of the reference point
+        limit: Maximum number of results
+        score_threshold: Minimum similarity score
+
+    Returns:
+        List of similar points with scores
+    """
+    client = get_qdrant_client()
+
+    try:
+        # First get the reference point's vector
+        reference = await get_point(collection_name, point_id, with_vectors=True, with_payload=False)
+
+        if not reference or not reference.get('vector'):
+            logger.error(f"Could not get vector for point {point_id}")
+            return []
+
+        # Search for similar vectors
+        return await search_vectors(
+            collection_name=collection_name,
+            query_vector=reference['vector'],
+            limit=limit + 1,  # +1 to account for the reference point itself
+            score_threshold=score_threshold
+        )
+    except Exception as e:
+        logger.error(f"Failed to search similar points: {e}")
+        return []
+
+
+async def delete_points(collection_name: str, point_ids: List[str]) -> int:
+    """
+    Delete multiple points from a collection
+
+    Args:
+        collection_name: Name of the collection
+        point_ids: List of point IDs to delete
+
+    Returns:
+        Number of points deleted
+    """
+    client = get_qdrant_client()
+
+    try:
+        client.delete(
+            collection_name=collection_name,
+            points_selector=point_ids
+        )
+        logger.info(f"Deleted {len(point_ids)} points from {collection_name}")
+        return len(point_ids)
+    except Exception as e:
+        logger.error(f"Failed to delete points from {collection_name}: {e}")
+        raise
+
+
+async def delete_collection(collection_name: str) -> bool:
+    """
+    Delete an entire Qdrant collection
+
+    Args:
+        collection_name: Name of the collection to delete
+
+    Returns:
+        True if deleted successfully, False otherwise
+    """
+    client = get_qdrant_client()
+
+    try:
+        # Check if collection exists
+        collections = await list_collections()
+        if not any(c['name'] == collection_name for c in collections):
+            logger.warning(f"Collection {collection_name} not found")
+            return False
+
+        client.delete_collection(collection_name=collection_name)
+        logger.info(f"Deleted collection {collection_name}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to delete collection {collection_name}: {e}")
+        return False

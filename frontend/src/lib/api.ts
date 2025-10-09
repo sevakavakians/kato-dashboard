@@ -77,9 +77,9 @@ class APIClient {
     return data
   }
 
-  async listSessions(skip = 0, limit = 50) {
+  async listSessions(skip = 0, limit = 50, status?: string, search?: string) {
     const { data } = await this.client.get('/sessions', {
-      params: { skip, limit },
+      params: { skip, limit, status, search },
     })
     return data
   }
@@ -96,6 +96,28 @@ class APIClient {
 
   async deleteSession(sessionId: string) {
     const { data } = await this.client.delete(`/sessions/${sessionId}`)
+    return data
+  }
+
+  async bulkDeleteSessions(sessionIds: string[]) {
+    const { data } = await this.client.post('/sessions/bulk-delete', {
+      session_ids: sessionIds,
+    })
+    return data
+  }
+
+  async getSessionStatistics() {
+    const { data } = await this.client.get('/sessions/statistics/overview')
+    return data
+  }
+
+  async getRedisSessionKeys() {
+    const { data } = await this.client.get('/sessions/redis-keys/diagnostic')
+    return data
+  }
+
+  async cleanupExpiredSessionKeys() {
+    const { data } = await this.client.post('/sessions/redis-keys/cleanup')
     return data
   }
 
@@ -154,6 +176,35 @@ class APIClient {
     return data
   }
 
+  async bulkDeletePatterns(processorId: string, patternIds: string[]) {
+    const { data } = await this.client.post(
+      `/databases/mongodb/${processorId}/patterns/bulk-delete`,
+      { pattern_ids: patternIds }
+    )
+    return data
+  }
+
+  async listCollections(processorId: string) {
+    const { data } = await this.client.get(
+      `/databases/mongodb/${processorId}/collections`
+    )
+    return data
+  }
+
+  async deleteCollection(processorId: string, collectionName: string) {
+    const { data } = await this.client.delete(
+      `/databases/mongodb/${processorId}/collections/${collectionName}`
+    )
+    return data
+  }
+
+  async deleteProcessor(processorId: string) {
+    const { data } = await this.client.delete(
+      `/databases/mongodb/processors/${processorId}`
+    )
+    return data
+  }
+
   // Qdrant
   async getQdrantCollections() {
     const { data } = await this.client.get('/databases/qdrant/collections')
@@ -167,6 +218,95 @@ class APIClient {
 
   async getQdrantCollectionStats(collectionName: string) {
     const { data } = await this.client.get(
+      `/databases/qdrant/collections/${collectionName}`
+    )
+    return data
+  }
+
+  async getQdrantPoints(
+    collectionName: string,
+    limit = 100,
+    offset?: string,
+    withVectors = false,
+    withPayload = true
+  ) {
+    const { data } = await this.client.get(
+      `/databases/qdrant/collections/${collectionName}/points`,
+      {
+        params: {
+          limit,
+          offset,
+          with_vectors: withVectors,
+          with_payload: withPayload,
+        },
+      }
+    )
+    return data
+  }
+
+  async getQdrantPoint(
+    collectionName: string,
+    pointId: string,
+    withVectors = true,
+    withPayload = true
+  ) {
+    const { data } = await this.client.get(
+      `/databases/qdrant/collections/${collectionName}/points/${pointId}`,
+      {
+        params: {
+          with_vectors: withVectors,
+          with_payload: withPayload,
+        },
+      }
+    )
+    return data
+  }
+
+  async searchQdrantVectors(
+    collectionName: string,
+    queryVector: number[],
+    limit = 10,
+    scoreThreshold?: number
+  ) {
+    const { data } = await this.client.post(
+      `/databases/qdrant/collections/${collectionName}/search`,
+      {
+        query_vector: queryVector,
+        limit,
+        score_threshold: scoreThreshold,
+      }
+    )
+    return data
+  }
+
+  async findSimilarPoints(
+    collectionName: string,
+    pointId: string,
+    limit = 10,
+    scoreThreshold?: number
+  ) {
+    const { data } = await this.client.get(
+      `/databases/qdrant/collections/${collectionName}/points/${pointId}/similar`,
+      {
+        params: {
+          limit,
+          score_threshold: scoreThreshold,
+        },
+      }
+    )
+    return data
+  }
+
+  async bulkDeleteQdrantPoints(collectionName: string, pointIds: string[]) {
+    const { data } = await this.client.post(
+      `/databases/qdrant/collections/${collectionName}/points/bulk-delete`,
+      { point_ids: pointIds }
+    )
+    return data
+  }
+
+  async deleteQdrantCollection(collectionName: string) {
+    const { data } = await this.client.delete(
       `/databases/qdrant/collections/${collectionName}`
     )
     return data
@@ -205,6 +345,55 @@ class APIClient {
   // Analytics
   async getAnalyticsOverview() {
     const { data } = await this.client.get('/analytics/overview')
+    return data
+  }
+
+  async getPatternFrequency(processorId?: string, limit = 20) {
+    const { data } = await this.client.get('/analytics/patterns/frequency', {
+      params: {
+        processor_id: processorId,
+        limit,
+      },
+    })
+    return data
+  }
+
+  async getSessionDurationTrends(periodHours = 24) {
+    const { data } = await this.client.get('/analytics/sessions/duration', {
+      params: { period_hours: periodHours },
+    })
+    return data
+  }
+
+  async getSystemPerformanceTrends(periodMinutes = 60) {
+    const { data } = await this.client.get('/analytics/system/performance', {
+      params: { period_minutes: periodMinutes },
+    })
+    return data
+  }
+
+  async getDatabaseStatistics() {
+    const { data } = await this.client.get('/analytics/database/statistics')
+    return data
+  }
+
+  async getLoadPredictions() {
+    const { data } = await this.client.get('/analytics/predictions/load')
+    return data
+  }
+
+  async getComprehensiveAnalytics(
+    patternLimit = 20,
+    sessionPeriodHours = 24,
+    performancePeriodMinutes = 60
+  ) {
+    const { data } = await this.client.get('/analytics/comprehensive', {
+      params: {
+        pattern_limit: patternLimit,
+        session_period_hours: sessionPeriodHours,
+        performance_period_minutes: performancePeriodMinutes,
+      },
+    })
     return data
   }
 }

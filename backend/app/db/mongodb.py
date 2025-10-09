@@ -182,6 +182,105 @@ async def delete_pattern(processor_id: str, pattern_id: str) -> bool:
     return result.deleted_count > 0
 
 
+async def bulk_delete_patterns(processor_id: str, pattern_ids: List[str]) -> int:
+    """
+    Delete multiple patterns at once (if not in read-only mode)
+
+    Args:
+        processor_id: The processor database name
+        pattern_ids: List of pattern IDs to delete
+
+    Returns:
+        Number of patterns deleted
+    """
+    settings = get_settings()
+    if settings.mongo_read_only:
+        logger.warning("MongoDB is in read-only mode, bulk delete rejected")
+        return 0
+
+    if not pattern_ids:
+        return 0
+
+    db = await get_database(processor_id)
+    collection = db['patterns_kb']
+
+    result = await collection.delete_many({'_id': {'$in': pattern_ids}})
+
+    logger.info(f"Bulk deleted {result.deleted_count} patterns from {processor_id}")
+    return result.deleted_count
+
+
+async def list_collections_in_db(processor_id: str) -> List[str]:
+    """
+    List all collections in a processor database
+
+    Args:
+        processor_id: The processor database name
+
+    Returns:
+        List of collection names
+    """
+    db = await get_database(processor_id)
+    collections = await db.list_collection_names()
+    return collections
+
+
+async def delete_collection(processor_id: str, collection_name: str) -> bool:
+    """
+    Delete an entire collection (if not in read-only mode)
+
+    Args:
+        processor_id: The processor database name
+        collection_name: Name of the collection to delete
+
+    Returns:
+        True if deleted, False otherwise
+    """
+    settings = get_settings()
+    if settings.mongo_read_only:
+        logger.warning("MongoDB is in read-only mode, collection delete rejected")
+        return False
+
+    db = await get_database(processor_id)
+
+    # Check if collection exists
+    collections = await db.list_collection_names()
+    if collection_name not in collections:
+        logger.warning(f"Collection {collection_name} not found in {processor_id}")
+        return False
+
+    await db.drop_collection(collection_name)
+    logger.info(f"Deleted collection {collection_name} from {processor_id}")
+    return True
+
+
+async def delete_database(processor_id: str) -> bool:
+    """
+    Delete an entire processor database (if not in read-only mode)
+
+    Args:
+        processor_id: The processor database name to delete
+
+    Returns:
+        True if deleted, False otherwise
+    """
+    settings = get_settings()
+    if settings.mongo_read_only:
+        logger.warning("MongoDB is in read-only mode, database delete rejected")
+        return False
+
+    # Check if database exists
+    databases = await list_databases()
+    if processor_id not in databases:
+        logger.warning(f"Database {processor_id} not found")
+        return False
+
+    client = await get_mongo_client()
+    await client.drop_database(processor_id)
+    logger.info(f"Deleted database {processor_id}")
+    return True
+
+
 async def get_pattern_statistics(processor_id: str) -> Dict[str, Any]:
     """
     Get aggregated statistics about patterns

@@ -6,18 +6,30 @@ from typing import Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, Query
 
 from app.services.kato_api import get_kato_client
+from app.services import analytics
+from app.services.session_manager import get_session_manager
 from app.db.mongodb import (
     get_processor_databases,
     get_patterns,
     get_pattern_by_id,
     get_pattern_statistics,
     update_pattern,
-    delete_pattern
+    delete_pattern,
+    bulk_delete_patterns,
+    list_collections_in_db,
+    delete_collection,
+    delete_database
 )
 from app.db.qdrant import (
     list_collections,
     get_collection_stats,
-    get_processor_collections
+    get_processor_collections,
+    scroll_points,
+    get_point,
+    search_vectors,
+    search_similar_points,
+    delete_points,
+    delete_collection as delete_qdrant_collection
 )
 from app.db.redis_client import (
     get_redis_info,
@@ -103,28 +115,52 @@ async def get_sessions_count():
 @router.get("/sessions")
 async def list_sessions(
     skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=200)
+    limit: int = Query(50, ge=1, le=200),
+    status: Optional[str] = Query(None),
+    search: Optional[str] = Query(None)
 ):
-    """List all active sessions with pagination"""
-    client = get_kato_client()
-    result = await client.list_sessions(skip=skip, limit=limit)
+    """
+    List all active sessions with pagination and filtering
 
-    if 'error' in result and result.get('total', 0) == 0:
-        logger.warning(f"Failed to list sessions: {result['error']}")
-
-    return result
+    Uses Redis as the source of truth for session data since KATO
+    doesn't expose a session listing endpoint.
+    """
+    try:
+        session_manager = get_session_manager()
+        result = await session_manager.list_sessions(
+            skip=skip,
+            limit=limit,
+            status=status,
+            search=search
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Failed to list sessions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/sessions/{session_id}")
 async def get_session_details(session_id: str):
-    """Get session details"""
+    """
+    Get session details
+
+    First tries KATO API, falls back to Redis if not available.
+    """
+    # Try KATO API first
     client = get_kato_client()
     result = await client.get_session(session_id)
 
-    if 'error' in result:
-        raise HTTPException(status_code=404, detail=result['error'])
+    if 'error' not in result:
+        return result
 
-    return result
+    # Fallback to Redis
+    session_manager = get_session_manager()
+    redis_result = await session_manager.get_session_by_id(session_id)
+
+    if not redis_result:
+        raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+    return redis_result
 
 
 @router.get("/sessions/{session_id}/stm")
@@ -141,14 +177,113 @@ async def get_session_short_term_memory(session_id: str):
 
 @router.delete("/sessions/{session_id}")
 async def delete_session(session_id: str):
-    """Delete a session"""
+    """
+    Delete a session
+
+    First tries KATO API, falls back to Redis if not available.
+    """
+    # Try KATO API first
     client = get_kato_client()
     result = await client.delete_session(session_id)
 
-    if 'error' in result:
-        raise HTTPException(status_code=400, detail=result['error'])
+    if 'error' not in result:
+        return result
 
-    return result
+    # Fallback to Redis
+    session_manager = get_session_manager()
+    success = await session_manager.delete_session(session_id)
+
+    if not success:
+        raise HTTPException(status_code=400, detail="Failed to delete session")
+
+    return {
+        "success": True,
+        "session_id": session_id,
+        "message": f"Session {session_id} deleted successfully",
+        "source": "redis"
+    }
+
+
+@router.post("/sessions/bulk-delete")
+async def bulk_delete_sessions(request: Dict[str, Any]):
+    """
+    Bulk delete multiple sessions
+
+    Request body:
+    {
+        "session_ids": ["session1", "session2", ...]
+    }
+    """
+    try:
+        session_ids = request.get('session_ids', [])
+
+        if not session_ids:
+            raise HTTPException(status_code=400, detail="No session IDs provided")
+
+        session_manager = get_session_manager()
+        result = await session_manager.bulk_delete_sessions(session_ids)
+
+        if not result.get('success'):
+            raise HTTPException(status_code=400, detail=result.get('error', 'Bulk delete failed'))
+
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to bulk delete sessions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/sessions/statistics/overview")
+async def get_session_statistics():
+    """Get aggregated session statistics"""
+    try:
+        session_manager = get_session_manager()
+        stats = await session_manager.get_session_statistics()
+        return stats
+    except Exception as e:
+        logger.error(f"Failed to get session statistics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/sessions/redis-keys/diagnostic")
+async def get_redis_session_keys_diagnostic():
+    """
+    Get raw Redis session keys for diagnostic and cleanup purposes
+
+    Returns detailed information about all session keys in Redis,
+    including TTL and status information.
+    """
+    try:
+        session_manager = get_session_manager()
+        result = await session_manager.get_redis_session_keys_diagnostic()
+        return result
+    except Exception as e:
+        logger.error(f"Failed to get Redis session keys: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/sessions/redis-keys/cleanup")
+async def cleanup_expired_redis_session_keys():
+    """
+    Clean up expired session keys from Redis
+
+    Removes session keys that have no TTL or have expired.
+    Useful for cleaning up stale test sessions.
+    """
+    try:
+        session_manager = get_session_manager()
+        result = await session_manager.cleanup_expired_session_keys()
+
+        if not result.get('success'):
+            raise HTTPException(status_code=400, detail=result.get('error', 'Cleanup failed'))
+
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to cleanup session keys: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============================================================================
@@ -166,6 +301,30 @@ async def list_processor_databases():
         }
     except Exception as e:
         logger.error(f"Failed to list processor databases: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/databases/mongodb/processors/{processor_id}")
+async def delete_processor_database(processor_id: str):
+    """Delete an entire processor database"""
+    try:
+        success = await delete_database(processor_id)
+
+        if not success:
+            raise HTTPException(
+                status_code=403,
+                detail="Delete database failed - database may be in read-only mode or does not exist"
+            )
+
+        return {
+            "success": True,
+            "processor_id": processor_id,
+            "message": f"Database {processor_id} deleted successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete database: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -253,6 +412,77 @@ async def delete_pattern_endpoint(processor_id: str, pattern_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/databases/mongodb/{processor_id}/patterns/bulk-delete")
+async def bulk_delete_patterns_endpoint(
+    processor_id: str,
+    request: Dict[str, Any]
+):
+    """Bulk delete multiple patterns"""
+    try:
+        pattern_ids = request.get('pattern_ids', [])
+
+        if not pattern_ids:
+            raise HTTPException(status_code=400, detail="No pattern IDs provided")
+
+        deleted_count = await bulk_delete_patterns(processor_id, pattern_ids)
+
+        if deleted_count == 0:
+            raise HTTPException(
+                status_code=403,
+                detail="Bulk delete failed - database may be in read-only mode"
+            )
+
+        return {
+            "success": True,
+            "deleted_count": deleted_count,
+            "requested_count": len(pattern_ids)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to bulk delete patterns: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/databases/mongodb/{processor_id}/collections")
+async def list_collections_endpoint(processor_id: str):
+    """List all collections in a processor database"""
+    try:
+        collections = await list_collections_in_db(processor_id)
+        return {
+            "collections": collections,
+            "total": len(collections),
+            "processor_id": processor_id
+        }
+    except Exception as e:
+        logger.error(f"Failed to list collections: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/databases/mongodb/{processor_id}/collections/{collection_name}")
+async def delete_collection_endpoint(processor_id: str, collection_name: str):
+    """Delete an entire collection"""
+    try:
+        success = await delete_collection(processor_id, collection_name)
+
+        if not success:
+            raise HTTPException(
+                status_code=403,
+                detail="Delete collection failed - database may be in read-only mode or collection does not exist"
+            )
+
+        return {
+            "success": True,
+            "processor_id": processor_id,
+            "collection_name": collection_name
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete collection: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/databases/mongodb/{processor_id}/statistics")
 async def get_processor_statistics(processor_id: str):
     """Get aggregated statistics for a processor"""
@@ -310,6 +540,167 @@ async def get_qdrant_collection_stats(collection_name: str):
         raise
     except Exception as e:
         logger.error(f"Failed to get collection stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/databases/qdrant/collections/{collection_name}/points")
+async def list_collection_points(
+    collection_name: str,
+    limit: int = Query(100, ge=1, le=1000),
+    offset: Optional[str] = Query(None),
+    with_vectors: bool = Query(False),
+    with_payload: bool = Query(True)
+):
+    """List points in a collection with pagination"""
+    try:
+        result = await scroll_points(
+            collection_name=collection_name,
+            limit=limit,
+            offset=offset,
+            with_vectors=with_vectors,
+            with_payload=with_payload
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Failed to list points: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/databases/qdrant/collections/{collection_name}/points/{point_id}")
+async def get_collection_point(
+    collection_name: str,
+    point_id: str,
+    with_vectors: bool = Query(True),
+    with_payload: bool = Query(True)
+):
+    """Get a specific point by ID"""
+    try:
+        point = await get_point(
+            collection_name=collection_name,
+            point_id=point_id,
+            with_vectors=with_vectors,
+            with_payload=with_payload
+        )
+
+        if not point:
+            raise HTTPException(status_code=404, detail="Point not found")
+
+        return point
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get point: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/databases/qdrant/collections/{collection_name}/search")
+async def search_collection_vectors(
+    collection_name: str,
+    request: Dict[str, Any]
+):
+    """Search for similar vectors in a collection"""
+    try:
+        query_vector = request.get('query_vector')
+        limit = request.get('limit', 10)
+        score_threshold = request.get('score_threshold')
+
+        if not query_vector:
+            raise HTTPException(status_code=400, detail="query_vector is required")
+
+        results = await search_vectors(
+            collection_name=collection_name,
+            query_vector=query_vector,
+            limit=limit,
+            score_threshold=score_threshold
+        )
+
+        return {
+            'results': results,
+            'count': len(results),
+            'collection': collection_name
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to search vectors: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/databases/qdrant/collections/{collection_name}/points/{point_id}/similar")
+async def find_similar_points(
+    collection_name: str,
+    point_id: str,
+    limit: int = Query(10, ge=1, le=100),
+    score_threshold: Optional[float] = Query(None)
+):
+    """Find points similar to a given point"""
+    try:
+        results = await search_similar_points(
+            collection_name=collection_name,
+            point_id=point_id,
+            limit=limit,
+            score_threshold=score_threshold
+        )
+
+        return {
+            'reference_point_id': point_id,
+            'similar_points': results,
+            'count': len(results),
+            'collection': collection_name
+        }
+    except Exception as e:
+        logger.error(f"Failed to find similar points: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/databases/qdrant/collections/{collection_name}/points/bulk-delete")
+async def bulk_delete_qdrant_points(
+    collection_name: str,
+    request: Dict[str, Any]
+):
+    """Bulk delete points from a Qdrant collection"""
+    try:
+        point_ids = request.get('point_ids', [])
+
+        if not point_ids:
+            raise HTTPException(status_code=400, detail="No point IDs provided")
+
+        deleted_count = await delete_points(collection_name, point_ids)
+
+        return {
+            "success": True,
+            "deleted_count": deleted_count,
+            "requested_count": len(point_ids),
+            "collection": collection_name
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to bulk delete points: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/databases/qdrant/collections/{collection_name}")
+async def delete_qdrant_collection_endpoint(collection_name: str):
+    """Delete an entire Qdrant collection"""
+    try:
+        success = await delete_qdrant_collection(collection_name)
+
+        if not success:
+            raise HTTPException(
+                status_code=404,
+                detail="Delete collection failed - collection does not exist"
+            )
+
+        return {
+            "success": True,
+            "collection_name": collection_name,
+            "message": f"Collection {collection_name} deleted successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete collection: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -447,4 +838,88 @@ async def get_analytics_overview():
         return overview
     except Exception as e:
         logger.error(f"Failed to get analytics overview: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/analytics/patterns/frequency")
+async def get_pattern_frequency(
+    processor_id: Optional[str] = Query(None),
+    limit: int = Query(20, ge=1, le=100)
+):
+    """Get pattern frequency analysis"""
+    try:
+        result = await analytics.get_pattern_frequency_analysis(
+            processor_id=processor_id,
+            limit=limit
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Failed to get pattern frequency: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/analytics/sessions/duration")
+async def get_session_duration_trends(
+    period_hours: int = Query(24, ge=1, le=168)
+):
+    """Get session duration trends"""
+    try:
+        result = await analytics.get_session_duration_trends(period_hours=period_hours)
+        return result
+    except Exception as e:
+        logger.error(f"Failed to get session trends: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/analytics/system/performance")
+async def get_performance_trends(
+    period_minutes: int = Query(60, ge=1, le=1440)
+):
+    """Get system performance trends over time"""
+    try:
+        result = await analytics.get_system_performance_trends(period_minutes=period_minutes)
+        return result
+    except Exception as e:
+        logger.error(f"Failed to get performance trends: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/analytics/database/statistics")
+async def get_db_statistics():
+    """Get aggregated database statistics"""
+    try:
+        result = await analytics.get_database_statistics()
+        return result
+    except Exception as e:
+        logger.error(f"Failed to get database statistics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/analytics/predictions/load")
+async def get_load_predictions():
+    """Get predictive load analysis"""
+    try:
+        result = await analytics.get_predictive_load_analysis()
+        return result
+    except Exception as e:
+        logger.error(f"Failed to get load predictions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/analytics/comprehensive")
+async def get_comprehensive_analytics(
+    pattern_limit: int = Query(20, ge=1, le=100),
+    session_period_hours: int = Query(24, ge=1, le=168),
+    performance_period_minutes: int = Query(60, ge=1, le=1440)
+):
+    """Get comprehensive analytics report"""
+    try:
+        result = await analytics.get_comprehensive_analytics(
+            pattern_limit=pattern_limit,
+            session_period_hours=session_period_hours,
+            performance_period_minutes=performance_period_minutes
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Failed to get comprehensive analytics: {e}")
         raise HTTPException(status_code=500, detail=str(e))

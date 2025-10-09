@@ -4,7 +4,7 @@ KATO Dashboard Backend - FastAPI Application
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -14,6 +14,7 @@ from app.db.mongodb import get_mongo_client, close_mongo_client
 from app.db.redis_client import get_redis_client, close_redis_client
 from app.db.qdrant import get_qdrant_client
 from app.services.kato_api import close_kato_client
+from app.services.websocket import get_connection_manager
 
 # Configure logging
 logging.basicConfig(
@@ -92,6 +93,46 @@ async def root():
         "status": "running",
         "docs": "/docs"
     }
+
+
+# WebSocket endpoint for real-time updates
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    """
+    WebSocket endpoint for real-time system metrics updates
+
+    Clients connect to this endpoint to receive:
+    - System metrics updates every 3 seconds
+    - Heartbeat messages to maintain connection
+
+    Message format:
+    {
+        "type": "metrics_update" | "heartbeat",
+        "timestamp": "ISO-8601 timestamp",
+        "data": {...}  // For metrics_update
+    }
+    """
+    manager = get_connection_manager()
+    await manager.connect(websocket)
+
+    try:
+        while True:
+            # Keep connection alive by receiving messages
+            # Client can send ping messages or other commands
+            data = await websocket.receive_text()
+
+            # Handle different message types
+            if data == "ping":
+                await manager.send_heartbeat(websocket)
+
+            # Additional message handlers can be added here
+
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+        logger.info("WebSocket client disconnected normally")
+    except Exception as e:
+        logger.error(f"WebSocket error: {e}")
+        manager.disconnect(websocket)
 
 
 # Global exception handler
