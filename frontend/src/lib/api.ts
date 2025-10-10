@@ -205,6 +205,77 @@ class APIClient {
     return data
   }
 
+  async getCollectionDocuments(
+    processorId: string,
+    collectionName: string,
+    skip = 0,
+    limit = 100,
+    sortBy = '_id',
+    sortOrder = -1
+  ) {
+    const { data } = await this.client.get(
+      `/databases/mongodb/${processorId}/collections/${collectionName}/documents`,
+      {
+        params: { skip, limit, sort_by: sortBy, sort_order: sortOrder },
+      }
+    )
+    return data
+  }
+
+  async getCollectionDocument(
+    processorId: string,
+    collectionName: string,
+    documentId: string
+  ) {
+    const { data } = await this.client.get(
+      `/databases/mongodb/${processorId}/collections/${collectionName}/documents/${documentId}`
+    )
+    return data
+  }
+
+  async updateCollectionDocument(
+    processorId: string,
+    collectionName: string,
+    documentId: string,
+    updates: Record<string, any>
+  ) {
+    const { data } = await this.client.put(
+      `/databases/mongodb/${processorId}/collections/${collectionName}/documents/${documentId}`,
+      updates
+    )
+    return data
+  }
+
+  async deleteCollectionDocument(
+    processorId: string,
+    collectionName: string,
+    documentId: string
+  ) {
+    const { data } = await this.client.delete(
+      `/databases/mongodb/${processorId}/collections/${collectionName}/documents/${documentId}`
+    )
+    return data
+  }
+
+  async bulkDeleteCollectionDocuments(
+    processorId: string,
+    collectionName: string,
+    documentIds: string[]
+  ) {
+    const { data } = await this.client.post(
+      `/databases/mongodb/${processorId}/collections/${collectionName}/documents/bulk-delete`,
+      { document_ids: documentIds }
+    )
+    return data
+  }
+
+  async getCollectionStatistics(processorId: string, collectionName: string) {
+    const { data } = await this.client.get(
+      `/databases/mongodb/${processorId}/collections/${collectionName}/statistics`
+    )
+    return data
+  }
+
   // Qdrant
   async getQdrantCollections() {
     const { data } = await this.client.get('/databases/qdrant/collections')

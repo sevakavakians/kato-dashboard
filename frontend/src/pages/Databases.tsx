@@ -45,6 +45,11 @@ interface RedisKeyInfo {
   size?: number
 }
 
+interface GenericDocument {
+  _id: string
+  [key: string]: any
+}
+
 function QdrantBrowser() {
   const [selectedCollection, setSelectedCollection] = useState<string | null>(null)
   const [selectedPoints, setSelectedPoints] = useState<Set<string>>(new Set())
@@ -693,6 +698,354 @@ function RedisKeyBrowser() {
   )
 }
 
+interface CollectionViewerProps {
+  processorId: string
+  collectionName: string
+}
+
+function CollectionViewer({ processorId, collectionName }: CollectionViewerProps) {
+  const [page, setPage] = useState(0)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [selectedDocuments, setSelectedDocuments] = useState<Set<string>>(new Set())
+  const [selectedDocumentForDetails, setSelectedDocumentForDetails] = useState<GenericDocument | null>(null)
+  const pageSize = 20
+  const queryClient = useQueryClient()
+
+  // Determine if this is the metadata collection (read-only)
+  const isMetadata = collectionName === 'metadata'
+
+  // Fetch documents
+  const { data: documentsData, isLoading: documentsLoading } = useQuery({
+    queryKey: ['collectionDocuments', processorId, collectionName, page],
+    queryFn: () => apiClient.getCollectionDocuments(processorId, collectionName, page * pageSize, pageSize),
+    refetchInterval: 15000,
+  })
+
+  // Delete document mutation
+  const deleteDocumentMutation = useMutation({
+    mutationFn: ({ documentId }: { documentId: string }) =>
+      apiClient.deleteCollectionDocument(processorId, collectionName, documentId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['collectionDocuments', processorId, collectionName] })
+    },
+  })
+
+  // Bulk delete mutation
+  const bulkDeleteMutation = useMutation({
+    mutationFn: (documentIds: string[]) =>
+      apiClient.bulkDeleteCollectionDocuments(processorId, collectionName, documentIds),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['collectionDocuments', processorId, collectionName] })
+      setSelectedDocuments(new Set())
+      alert(`Successfully deleted ${data.deleted_count} document(s)`)
+    },
+    onError: (error: any) => {
+      alert(`Failed to delete documents: ${error.response?.data?.detail || error.message}`)
+    },
+  })
+
+  const documents: GenericDocument[] = documentsData?.documents || []
+  const total = documentsData?.total || 0
+  const totalPages = Math.ceil(total / pageSize)
+
+  const filteredDocuments = documents.filter((doc) => {
+    const searchString = JSON.stringify(doc).toLowerCase()
+    return searchString.includes(searchTerm.toLowerCase())
+  })
+
+  const handleToggleDocument = (documentId: string) => {
+    const newSelected = new Set(selectedDocuments)
+    if (newSelected.has(documentId)) {
+      newSelected.delete(documentId)
+    } else {
+      newSelected.add(documentId)
+    }
+    setSelectedDocuments(newSelected)
+  }
+
+  const handleToggleAll = () => {
+    if (selectedDocuments.size === filteredDocuments.length) {
+      setSelectedDocuments(new Set())
+    } else {
+      setSelectedDocuments(new Set(filteredDocuments.map(d => d._id)))
+    }
+  }
+
+  const handleBulkDelete = async () => {
+    if (selectedDocuments.size === 0) return
+
+    if (window.confirm(`Are you sure you want to delete ${selectedDocuments.size} document(s)? This action cannot be undone.`)) {
+      await bulkDeleteMutation.mutateAsync(Array.from(selectedDocuments))
+    }
+  }
+
+  const handleDelete = async (documentId: string) => {
+    if (window.confirm('Are you sure you want to delete this document?')) {
+      await deleteDocumentMutation.mutateAsync({ documentId })
+    }
+  }
+
+  const getDocumentDisplayText = (doc: GenericDocument): string => {
+    return doc.name || doc.title || doc._id || 'Document'
+  }
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow">
+      {/* Header */}
+      <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+          {collectionName}
+        </h3>
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          {total} document{total !== 1 ? 's' : ''}
+        </p>
+      </div>
+
+      {/* Search and Actions */}
+      {!isMetadata && (
+        <div className="p-4 border-b border-gray-200 dark:border-gray-700 space-y-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <input
+              type="text"
+              placeholder="Search documents..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+          {selectedDocuments.size > 0 && (
+            <button
+              onClick={handleBulkDelete}
+              disabled={bulkDeleteMutation.isPending}
+              className="w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 text-sm"
+            >
+              <Trash className="w-4 h-4" />
+              Delete Selected ({selectedDocuments.size})
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Documents List */}
+      {documentsLoading ? (
+        <div className="p-8 text-center text-gray-500 dark:text-gray-400">
+          Loading documents...
+        </div>
+      ) : filteredDocuments.length === 0 ? (
+        <div className="p-8 text-center text-gray-500 dark:text-gray-400">
+          {searchTerm ? 'No documents found matching your search' : 'No documents available'}
+        </div>
+      ) : (
+        <>
+          {/* Select All Header (not for metadata) */}
+          {!isMetadata && (
+            <div className="p-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleToggleAll}
+                  className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400"
+                >
+                  {selectedDocuments.size === filteredDocuments.length && filteredDocuments.length > 0 ? (
+                    <CheckSquare className="w-4 h-4" />
+                  ) : (
+                    <Square className="w-4 h-4" />
+                  )}
+                </button>
+                <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                  {selectedDocuments.size === filteredDocuments.length && filteredDocuments.length > 0
+                    ? 'Deselect All'
+                    : 'Select All'
+                  }
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Document Rows */}
+          <div className="max-h-[400px] overflow-y-auto divide-y divide-gray-200 dark:divide-gray-700">
+            {filteredDocuments.map((doc) => (
+              <div key={doc._id} className="flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                {/* Checkbox (not for metadata) */}
+                {!isMetadata && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleToggleDocument(doc._id)
+                    }}
+                    className="p-3 text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 flex-shrink-0"
+                  >
+                    {selectedDocuments.has(doc._id) ? (
+                      <CheckSquare className="w-4 h-4" />
+                    ) : (
+                      <Square className="w-4 h-4" />
+                    )}
+                  </button>
+                )}
+
+                {/* Clickable Document Content */}
+                <button
+                  onClick={() => setSelectedDocumentForDetails(doc)}
+                  className="flex-1 p-3 text-left flex items-center justify-between group"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm text-gray-900 dark:text-white truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                      {getDocumentDisplayText(doc)}
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400 truncate font-mono">
+                      ID: {doc._id}
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors flex-shrink-0 ml-2" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Pagination (not for metadata) */}
+      {!isMetadata && totalPages > 1 && (
+        <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
+          <button
+            onClick={() => setPage(p => Math.max(0, p - 1))}
+            disabled={page === 0}
+            className="px-3 py-1 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Previous
+          </button>
+          <span className="text-xs text-gray-600 dark:text-gray-400">
+            Page {page + 1} of {totalPages}
+          </span>
+          <button
+            onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+            disabled={page >= totalPages - 1}
+            className="px-3 py-1 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Next
+          </button>
+        </div>
+      )}
+
+      {/* Document Detail Modal */}
+      {selectedDocumentForDetails && (
+        <DocumentDetailModal
+          document={selectedDocumentForDetails}
+          collectionName={collectionName}
+          processorId={processorId}
+          onClose={() => setSelectedDocumentForDetails(null)}
+          onEdit={isMetadata ? undefined : (doc) => {
+            // TODO: Implement edit functionality
+            console.log('Edit document:', doc)
+            setSelectedDocumentForDetails(null)
+          }}
+          onDelete={isMetadata ? undefined : (docId) => {
+            handleDelete(docId)
+            setSelectedDocumentForDetails(null)
+          }}
+          readOnly={isMetadata}
+        />
+      )}
+    </div>
+  )
+}
+
+interface DocumentDetailModalProps {
+  document: GenericDocument
+  collectionName: string
+  processorId: string
+  onClose: () => void
+  onEdit?: (document: GenericDocument) => void
+  onDelete?: (documentId: string) => void
+  readOnly?: boolean
+}
+
+function DocumentDetailModal({
+  document,
+  collectionName,
+  processorId,
+  onClose,
+  onEdit,
+  onDelete,
+  readOnly = false
+}: DocumentDetailModalProps) {
+  // Get a display name for the document
+  const getDocumentDisplayName = (doc: GenericDocument): string => {
+    return doc.name || doc.title || doc._id || 'Document'
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        {/* Header */}
+        <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex items-start justify-between">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                {getDocumentDisplayName(document)}
+              </h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Collection: {collectionName} | Processor: {processorId}
+              </p>
+            </div>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="p-6">
+          <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4">
+            <pre className="text-xs text-gray-900 dark:text-white overflow-auto max-h-[500px]">
+              {JSON.stringify(document, null, 2)}
+            </pre>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex gap-3">
+          {!readOnly && onEdit && (
+            <button
+              onClick={() => {
+                onEdit(document)
+                onClose()
+              }}
+              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+            >
+              <Edit className="w-4 h-4" />
+              Edit Document
+            </button>
+          )}
+          {!readOnly && onDelete && (
+            <button
+              onClick={() => {
+                onDelete(document._id)
+                onClose()
+              }}
+              className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete Document
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-gray-300 dark:bg-gray-600 text-gray-900 dark:text-white rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 interface PatternDetailModalProps {
   pattern: Pattern
   onClose: () => void
@@ -869,6 +1222,7 @@ export default function Databases() {
   const [selectedProcessors, setSelectedProcessors] = useState<Set<string>>(new Set())
   const [showCollections, setShowCollections] = useState(false)
   const [selectedPatternForDetails, setSelectedPatternForDetails] = useState<Pattern | null>(null)
+  const [collectionsToView, setCollectionsToView] = useState<Set<string>>(new Set())
   const pageSize = 20
   const queryClient = useQueryClient()
 
@@ -1446,32 +1800,46 @@ export default function Databases() {
                       ) : (
                         <>
                           {/* Bulk Actions */}
-                          <div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-200 dark:border-gray-700">
-                            <div className="flex items-center gap-3">
-                              <button
-                                onClick={handleToggleAllCollections}
-                                className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400"
-                              >
-                                {selectedCollections.size === collections.length && collections.length > 0 ? (
-                                  <CheckSquare className="w-5 h-5" />
-                                ) : (
-                                  <Square className="w-5 h-5" />
-                                )}
-                              </button>
-                              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                {selectedCollections.size === collections.length && collections.length > 0
-                                  ? 'Deselect All'
-                                  : 'Select All'}
-                              </span>
+                          <div className="mb-4 pb-4 border-b border-gray-200 dark:border-gray-700 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <button
+                                  onClick={handleToggleAllCollections}
+                                  className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400"
+                                >
+                                  {selectedCollections.size === collections.length && collections.length > 0 ? (
+                                    <CheckSquare className="w-5 h-5" />
+                                  ) : (
+                                    <Square className="w-5 h-5" />
+                                  )}
+                                </button>
+                                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                  {selectedCollections.size === collections.length && collections.length > 0
+                                    ? 'Deselect All'
+                                    : 'Select All'}
+                                </span>
+                              </div>
+                              {selectedCollections.size > 0 && (
+                                <button
+                                  onClick={handleBulkDeleteCollections}
+                                  disabled={deleteCollectionMutation.isPending}
+                                  className="px-3 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2 disabled:opacity-50 text-sm"
+                                >
+                                  <Trash className="w-3 h-3" />
+                                  Delete ({selectedCollections.size})
+                                </button>
+                              )}
                             </div>
+                            {/* View Selected Collections Button */}
                             {selectedCollections.size > 0 && (
                               <button
-                                onClick={handleBulkDeleteCollections}
-                                disabled={deleteCollectionMutation.isPending}
-                                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2 disabled:opacity-50"
+                                onClick={() => {
+                                  setCollectionsToView(new Set(selectedCollections))
+                                }}
+                                className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 text-sm font-medium"
                               >
-                                <Trash className="w-4 h-4" />
-                                Delete Selected ({selectedCollections.size})
+                                <Database className="w-4 h-4" />
+                                View Selected Collections ({selectedCollections.size})
                               </button>
                             )}
                           </div>
@@ -1512,6 +1880,36 @@ export default function Databases() {
                     </div>
                   )}
                 </div>
+
+                {/* Multi-Collection Viewer */}
+                {collectionsToView.size > 0 && (
+                  <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                        Viewing {collectionsToView.size} Collection{collectionsToView.size !== 1 ? 's' : ''}
+                      </h3>
+                      <button
+                        onClick={() => setCollectionsToView(new Set())}
+                        className="px-3 py-1 text-sm bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                      >
+                        Clear View
+                      </button>
+                    </div>
+                    <div className={`grid gap-4 ${
+                      collectionsToView.size === 1
+                        ? 'grid-cols-1'
+                        : 'grid-cols-1 lg:grid-cols-2'
+                    }`}>
+                      {Array.from(collectionsToView).map((collectionName) => (
+                        <CollectionViewer
+                          key={collectionName}
+                          processorId={selectedProcessor!}
+                          collectionName={collectionName}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Stats */}
                 {stats && (

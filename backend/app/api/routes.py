@@ -18,7 +18,13 @@ from app.db.mongodb import (
     bulk_delete_patterns,
     list_collections_in_db,
     delete_collection,
-    delete_database
+    delete_database,
+    get_collection_documents,
+    get_collection_document_by_id,
+    update_collection_document,
+    delete_collection_document,
+    bulk_delete_collection_documents,
+    get_collection_statistics
 )
 from app.db.qdrant import (
     list_collections,
@@ -491,6 +497,148 @@ async def get_processor_statistics(processor_id: str):
         return stats
     except Exception as e:
         logger.error(f"Failed to get statistics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/databases/mongodb/{processor_id}/collections/{collection_name}/documents")
+async def list_collection_documents(
+    processor_id: str,
+    collection_name: str,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000),
+    sort_by: str = Query("_id"),
+    sort_order: int = Query(-1, ge=-1, le=1)
+):
+    """Get documents from any collection"""
+    try:
+        result = await get_collection_documents(
+            processor_id=processor_id,
+            collection_name=collection_name,
+            skip=skip,
+            limit=limit,
+            sort_by=sort_by,
+            sort_order=sort_order
+        )
+        return result
+    except Exception as e:
+        logger.error(f"Failed to get collection documents: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/databases/mongodb/{processor_id}/collections/{collection_name}/documents/{document_id}")
+async def get_collection_document_details(
+    processor_id: str,
+    collection_name: str,
+    document_id: str
+):
+    """Get specific document details from any collection"""
+    try:
+        document = await get_collection_document_by_id(processor_id, collection_name, document_id)
+
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        return document
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get document: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/databases/mongodb/{processor_id}/collections/{collection_name}/documents/{document_id}")
+async def update_collection_document_endpoint(
+    processor_id: str,
+    collection_name: str,
+    document_id: str,
+    updates: Dict[str, Any]
+):
+    """Update a document in any collection"""
+    try:
+        success = await update_collection_document(processor_id, collection_name, document_id, updates)
+
+        if not success:
+            raise HTTPException(
+                status_code=403,
+                detail="Update failed - database may be in read-only mode"
+            )
+
+        return {"success": True, "document_id": document_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update document: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/databases/mongodb/{processor_id}/collections/{collection_name}/documents/{document_id}")
+async def delete_collection_document_endpoint(
+    processor_id: str,
+    collection_name: str,
+    document_id: str
+):
+    """Delete a document from any collection"""
+    try:
+        success = await delete_collection_document(processor_id, collection_name, document_id)
+
+        if not success:
+            raise HTTPException(
+                status_code=403,
+                detail="Delete failed - database may be in read-only mode"
+            )
+
+        return {"success": True, "document_id": document_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete document: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/databases/mongodb/{processor_id}/collections/{collection_name}/documents/bulk-delete")
+async def bulk_delete_collection_documents_endpoint(
+    processor_id: str,
+    collection_name: str,
+    request: Dict[str, Any]
+):
+    """Bulk delete multiple documents from any collection"""
+    try:
+        document_ids = request.get('document_ids', [])
+
+        if not document_ids:
+            raise HTTPException(status_code=400, detail="No document IDs provided")
+
+        deleted_count = await bulk_delete_collection_documents(processor_id, collection_name, document_ids)
+
+        if deleted_count == 0:
+            raise HTTPException(
+                status_code=403,
+                detail="Bulk delete failed - database may be in read-only mode"
+            )
+
+        return {
+            "success": True,
+            "deleted_count": deleted_count,
+            "requested_count": len(document_ids)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to bulk delete documents: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/databases/mongodb/{processor_id}/collections/{collection_name}/statistics")
+async def get_collection_statistics_endpoint(
+    processor_id: str,
+    collection_name: str
+):
+    """Get aggregated statistics for any collection"""
+    try:
+        stats = await get_collection_statistics(processor_id, collection_name)
+        return stats
+    except Exception as e:
+        logger.error(f"Failed to get collection statistics: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

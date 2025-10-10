@@ -373,3 +373,187 @@ async def get_pattern_statistics(processor_id: str) -> Dict[str, Any]:
         'frequency_stats': {},
         'length_distribution': []
     }
+
+
+# ============================================================================
+# Generic Collection Operations
+# ============================================================================
+
+async def get_collection_documents(
+    processor_id: str,
+    collection_name: str,
+    skip: int = 0,
+    limit: int = 100,
+    sort_by: str = '_id',
+    sort_order: int = -1,
+    filter_query: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """
+    Get documents from any collection in a processor database
+
+    Args:
+        processor_id: The processor database name
+        collection_name: Name of the collection to query
+        skip: Number of documents to skip (pagination)
+        limit: Maximum documents to return
+        sort_by: Field to sort by
+        sort_order: 1 for ascending, -1 for descending
+        filter_query: Optional MongoDB query filter
+
+    Returns:
+        Dictionary with documents and metadata
+    """
+    db = await get_database(processor_id)
+    collection = db[collection_name]
+
+    query = filter_query or {}
+
+    # Get total count
+    total = await collection.count_documents(query)
+
+    # Get documents with pagination
+    cursor = collection.find(query).sort(sort_by, sort_order).skip(skip).limit(limit)
+    documents = await cursor.to_list(length=limit)
+
+    # Serialize ObjectId fields to strings
+    serialized_documents = [serialize_mongo_doc(doc) for doc in documents]
+
+    return {
+        'documents': serialized_documents,
+        'total': total,
+        'skip': skip,
+        'limit': limit,
+        'has_more': (skip + len(documents)) < total,
+        'collection_name': collection_name
+    }
+
+
+async def get_collection_document_by_id(
+    processor_id: str,
+    collection_name: str,
+    document_id: str
+) -> Optional[Dict[str, Any]]:
+    """Get a specific document from any collection by ID"""
+    db = await get_database(processor_id)
+    collection = db[collection_name]
+    document = await collection.find_one({'_id': document_id})
+    return serialize_mongo_doc(document) if document else None
+
+
+async def update_collection_document(
+    processor_id: str,
+    collection_name: str,
+    document_id: str,
+    updates: Dict[str, Any]
+) -> bool:
+    """
+    Update a document in any collection (if not in read-only mode)
+
+    Returns:
+        True if updated, False otherwise
+    """
+    settings = get_settings()
+    if settings.mongo_read_only:
+        logger.warning("MongoDB is in read-only mode, update rejected")
+        return False
+
+    db = await get_database(processor_id)
+    collection = db[collection_name]
+
+    result = await collection.update_one(
+        {'_id': document_id},
+        {'$set': updates}
+    )
+
+    return result.modified_count > 0
+
+
+async def delete_collection_document(
+    processor_id: str,
+    collection_name: str,
+    document_id: str
+) -> bool:
+    """
+    Delete a document from any collection (if not in read-only mode)
+
+    Returns:
+        True if deleted, False otherwise
+    """
+    settings = get_settings()
+    if settings.mongo_read_only:
+        logger.warning("MongoDB is in read-only mode, delete rejected")
+        return False
+
+    db = await get_database(processor_id)
+    collection = db[collection_name]
+
+    result = await collection.delete_one({'_id': document_id})
+
+    return result.deleted_count > 0
+
+
+async def bulk_delete_collection_documents(
+    processor_id: str,
+    collection_name: str,
+    document_ids: List[str]
+) -> int:
+    """
+    Delete multiple documents from any collection (if not in read-only mode)
+
+    Args:
+        processor_id: The processor database name
+        collection_name: Name of the collection
+        document_ids: List of document IDs to delete
+
+    Returns:
+        Number of documents deleted
+    """
+    settings = get_settings()
+    if settings.mongo_read_only:
+        logger.warning("MongoDB is in read-only mode, bulk delete rejected")
+        return 0
+
+    if not document_ids:
+        return 0
+
+    db = await get_database(processor_id)
+    collection = db[collection_name]
+
+    result = await collection.delete_many({'_id': {'$in': document_ids}})
+
+    logger.info(f"Bulk deleted {result.deleted_count} documents from {processor_id}.{collection_name}")
+    return result.deleted_count
+
+
+async def get_collection_statistics(
+    processor_id: str,
+    collection_name: str
+) -> Dict[str, Any]:
+    """
+    Get aggregated statistics for any collection
+
+    Returns basic stats like document count and size
+    """
+    db = await get_database(processor_id)
+    collection = db[collection_name]
+
+    # Get total document count
+    total_documents = await collection.count_documents({})
+
+    # Get collection stats from MongoDB
+    try:
+        stats = await db.command('collStats', collection_name)
+        return {
+            'total_documents': total_documents,
+            'size_bytes': stats.get('size', 0),
+            'avg_document_size': stats.get('avgObjSize', 0),
+            'storage_size': stats.get('storageSize', 0),
+            'indexes': stats.get('nindexes', 0),
+            'collection_name': collection_name
+        }
+    except Exception as e:
+        logger.warning(f"Failed to get collection stats for {collection_name}: {e}")
+        return {
+            'total_documents': total_documents,
+            'collection_name': collection_name
+        }
