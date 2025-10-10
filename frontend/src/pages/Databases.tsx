@@ -5,10 +5,14 @@ import { apiClient } from '../lib/api'
 
 interface Pattern {
   _id: string
-  pattern: string
+  name: string
+  pattern_data?: any[]
   frequency: number
-  confidence?: number
-  last_seen?: string
+  length?: number
+  emotives?: any
+  metadata?: {
+    [key: string]: any  // Arbitrary training data fields
+  }
   [key: string]: any
 }
 
@@ -737,15 +741,31 @@ function PatternDetailModal({ pattern, onClose, onEdit, onDelete, processorId }:
             </div>
           </div>
 
-          {/* Pattern Text */}
+          {/* Pattern Name */}
           <div>
             <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
-              Pattern
+              Pattern Name
             </label>
             <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3">
-              <p className="text-gray-900 dark:text-white">{pattern.pattern}</p>
+              <code className="text-sm text-gray-900 dark:text-white font-mono break-all">
+                {pattern.name}
+              </code>
             </div>
           </div>
+
+          {/* Pattern Data */}
+          {pattern.pattern_data && (
+            <div>
+              <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
+                Pattern Data
+              </label>
+              <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 max-h-48 overflow-y-auto">
+                <pre className="text-xs text-gray-900 dark:text-white">
+                  {JSON.stringify(pattern.pattern_data, null, 2)}
+                </pre>
+              </div>
+            </div>
+          )}
 
           {/* Metrics Grid */}
           <div className="grid grid-cols-2 gap-4">
@@ -760,53 +780,43 @@ function PatternDetailModal({ pattern, onClose, onEdit, onDelete, processorId }:
               </div>
             </div>
 
-            {pattern.confidence !== undefined && (
+            {pattern.length !== undefined && (
               <div>
                 <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
-                  Confidence
+                  Length
                 </label>
-                <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3">
-                  <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-                    {pattern.confidence}%
+                <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-3">
+                  <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                    {pattern.length}
                   </p>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Last Seen */}
-          {pattern.last_seen && (
+          {/* Emotives */}
+          {pattern.emotives && Object.keys(pattern.emotives).length > 0 && (
             <div>
               <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
-                Last Seen
+                Emotives
               </label>
               <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3">
-                <p className="text-gray-900 dark:text-white">
-                  {new Date(pattern.last_seen).toLocaleString()}
-                </p>
+                <pre className="text-xs text-gray-900 dark:text-white overflow-auto">
+                  {JSON.stringify(pattern.emotives, null, 2)}
+                </pre>
               </div>
             </div>
           )}
 
-          {/* Additional Fields */}
-          {Object.keys(pattern).filter(key =>
-            !['_id', 'pattern', 'frequency', 'confidence', 'last_seen'].includes(key)
-          ).length > 0 && (
+          {/* Metadata (arbitrary training data fields) */}
+          {pattern.metadata && Object.keys(pattern.metadata).length > 0 && (
             <div>
               <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
-                Additional Fields
+                Metadata
               </label>
-              <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3">
-                <pre className="text-xs text-gray-900 dark:text-white overflow-auto">
-                  {JSON.stringify(
-                    Object.fromEntries(
-                      Object.entries(pattern).filter(([key]) =>
-                        !['_id', 'pattern', 'frequency', 'confidence', 'last_seen'].includes(key)
-                      )
-                    ),
-                    null,
-                    2
-                  )}
+              <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 max-h-64 overflow-y-auto">
+                <pre className="text-xs text-gray-900 dark:text-white">
+                  {JSON.stringify(pattern.metadata, null, 2)}
                 </pre>
               </div>
             </div>
@@ -861,6 +871,12 @@ export default function Databases() {
   const [selectedPatternForDetails, setSelectedPatternForDetails] = useState<Pattern | null>(null)
   const pageSize = 20
   const queryClient = useQueryClient()
+
+  // Helper function to get pattern identifier for display
+  // Uses only core KATO Superknowledgebase fields (name, not arbitrary metadata)
+  const getPatternIdentifier = (pattern: Pattern): string => {
+    return pattern.name || pattern._id || 'Unknown pattern'
+  }
 
   // Fetch processors
   const { data: processorsData, isLoading: processorsLoading } = useQuery({
@@ -946,7 +962,7 @@ export default function Databases() {
   const totalPages = Math.ceil(total / pageSize)
 
   const filteredPatterns = patterns.filter((pattern) =>
-    pattern.pattern?.toLowerCase().includes(searchTerm.toLowerCase())
+    getPatternIdentifier(pattern).toLowerCase().includes(searchTerm.toLowerCase())
   )
 
   const handleDelete = async (patternId: string) => {
@@ -959,9 +975,8 @@ export default function Databases() {
   const handleEdit = (pattern: Pattern) => {
     setEditingPattern(pattern)
     setEditFormData({
-      pattern: pattern.pattern,
+      name: pattern.name,
       frequency: pattern.frequency,
-      confidence: pattern.confidence || 0,
     })
   }
 
@@ -1597,39 +1612,25 @@ export default function Databases() {
                               <div className="space-y-3">
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                    Pattern
+                                    Pattern Name (Read-only)
                                   </label>
                                   <input
                                     type="text"
-                                    value={editFormData.pattern || ''}
-                                    onChange={(e) => setEditFormData({ ...editFormData, pattern: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                                    value={editFormData.name || ''}
+                                    disabled
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm"
                                   />
                                 </div>
-                                <div className="grid grid-cols-2 gap-3">
-                                  <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                      Frequency
-                                    </label>
-                                    <input
-                                      type="number"
-                                      value={editFormData.frequency || 0}
-                                      onChange={(e) => setEditFormData({ ...editFormData, frequency: parseInt(e.target.value) })}
-                                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                                    />
-                                  </div>
-                                  <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                      Confidence
-                                    </label>
-                                    <input
-                                      type="number"
-                                      step="0.1"
-                                      value={editFormData.confidence || 0}
-                                      onChange={(e) => setEditFormData({ ...editFormData, confidence: parseFloat(e.target.value) })}
-                                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                                    />
-                                  </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Frequency
+                                  </label>
+                                  <input
+                                    type="number"
+                                    value={editFormData.frequency || 0}
+                                    onChange={(e) => setEditFormData({ ...editFormData, frequency: parseInt(e.target.value) })}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                                  />
                                 </div>
                                 <div className="flex gap-2">
                                   <button
@@ -1672,18 +1673,18 @@ export default function Databases() {
                                 className="flex-1 text-left flex items-center justify-between group"
                               >
                                 <div className="flex-1 min-w-0">
-                                  <div className="font-semibold text-gray-900 dark:text-white mb-1 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                                    {pattern.pattern}
+                                  <div className="font-mono text-sm text-gray-900 dark:text-white mb-1 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                                    {getPatternIdentifier(pattern)}
                                   </div>
                                   <div className="flex gap-4 text-sm text-gray-600 dark:text-gray-400">
                                     <span className="flex items-center gap-1">
                                       <span className="font-medium">Frequency:</span>
                                       <span className="text-blue-600 dark:text-blue-400 font-semibold">{pattern.frequency}</span>
                                     </span>
-                                    {pattern.confidence !== undefined && (
+                                    {pattern.length !== undefined && (
                                       <span className="flex items-center gap-1">
-                                        <span className="font-medium">Confidence:</span>
-                                        <span className="text-green-600 dark:text-green-400 font-semibold">{pattern.confidence}%</span>
+                                        <span className="font-medium">Length:</span>
+                                        <span className="text-purple-600 dark:text-purple-400 font-semibold">{pattern.length}</span>
                                       </span>
                                     )}
                                   </div>

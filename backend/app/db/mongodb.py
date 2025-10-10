@@ -5,6 +5,7 @@ import logging
 from typing import Optional, List, Dict, Any
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 from pymongo.errors import ConnectionFailure
+from bson import ObjectId
 
 from app.core.config import get_settings
 
@@ -12,6 +13,31 @@ logger = logging.getLogger("kato_dashboard.db.mongodb")
 
 # Singleton client
 _mongo_client: Optional[AsyncIOMotorClient] = None
+
+
+def serialize_mongo_doc(doc: Any) -> Any:
+    """
+    Recursively convert MongoDB ObjectId instances to strings for JSON serialization.
+
+    Args:
+        doc: MongoDB document or any value that might contain ObjectId
+
+    Returns:
+        Document with all ObjectId instances converted to strings
+    """
+    if doc is None:
+        return None
+
+    if isinstance(doc, ObjectId):
+        return str(doc)
+
+    if isinstance(doc, dict):
+        return {key: serialize_mongo_doc(value) for key, value in doc.items()}
+
+    if isinstance(doc, list):
+        return [serialize_mongo_doc(item) for item in doc]
+
+    return doc
 
 
 async def get_mongo_client() -> AsyncIOMotorClient:
@@ -119,8 +145,11 @@ async def get_patterns(
     cursor = collection.find(query).sort(sort_by, sort_order).skip(skip).limit(limit)
     patterns = await cursor.to_list(length=limit)
 
+    # Serialize ObjectId fields to strings
+    serialized_patterns = [serialize_mongo_doc(pattern) for pattern in patterns]
+
     return {
-        'patterns': patterns,
+        'patterns': serialized_patterns,
         'total': total,
         'skip': skip,
         'limit': limit,
@@ -132,7 +161,8 @@ async def get_pattern_by_id(processor_id: str, pattern_id: str) -> Optional[Dict
     """Get a specific pattern by ID"""
     db = await get_database(processor_id)
     collection = db['patterns_kb']
-    return await collection.find_one({'_id': pattern_id})
+    pattern = await collection.find_one({'_id': pattern_id})
+    return serialize_mongo_doc(pattern) if pattern else None
 
 
 async def update_pattern(
@@ -307,7 +337,13 @@ async def get_pattern_statistics(processor_id: str) -> Dict[str, Any]:
                 'length_distribution': [
                     {
                         '$project': {
-                            'length': {'$size': '$pattern'}
+                            'length': {
+                                '$cond': {
+                                    'if': {'$isArray': '$pattern'},
+                                    'then': {'$size': '$pattern'},
+                                    'else': 0
+                                }
+                            }
                         }
                     },
                     {

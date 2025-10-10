@@ -1,7 +1,7 @@
 # Architecture Documentation
 
-**Last Updated**: 2025-10-06
-**Status**: MVP Complete
+**Last Updated**: 2025-10-10
+**Status**: MVP Complete + Bug Fixes
 **Confidence Level**: High (all components tested and verified)
 
 ## System Overview
@@ -240,9 +240,42 @@ Auto-update Component
 
 ### MongoDB Collections
 - `processors` - Pattern processor metadata
-- `patterns` - Learned behavioral patterns
+- `patterns` - Learned behavioral patterns (see schema below)
 - `sessions` - Session metadata
 - Read-only access by default
+
+#### KATO Superknowledgebase Pattern Schema (Verified)
+**Status**: Verified with production data (2025-10-10)
+**Confidence**: HIGH
+
+```typescript
+interface Pattern {
+  _id: ObjectId              // MongoDB unique identifier
+  name: string               // Hash identifier (e.g., "1a2b3c4d5e6f...")
+  pattern_data: any          // Actual pattern content (any type: string, array, object)
+  length: number             // Pattern length/size
+  emotives?: any             // Emotional components (optional)
+  metadata?: any             // Additional metadata (optional)
+  frequency?: number         // Usage frequency (added by aggregation)
+}
+```
+
+**Core Fields** (always present):
+- `_id`: MongoDB ObjectId (serialized to string in API responses)
+- `name`: Hash-based identifier for the pattern
+- `pattern_data`: The actual pattern (supports any data type)
+- `length`: Numeric length/size of pattern
+
+**Optional Fields**:
+- `emotives`: Emotional components associated with pattern
+- `metadata`: Additional metadata (structure varies)
+- `frequency`: Added by aggregation queries, not stored in document
+
+**Important Notes**:
+- Pattern data can be any type (text, arrays, objects, nested structures)
+- Frontend must handle `pattern_data` generically using JSON.stringify()
+- Do not assume text-only patterns
+- ObjectId fields must be serialized to strings for JSON responses (use `serialize_mongo_doc()` helper)
 
 ### Qdrant Collections
 - `long_term_memory` - Vectorized memories

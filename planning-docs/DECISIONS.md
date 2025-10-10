@@ -434,6 +434,128 @@ Use HTTP polling with 5-10 second intervals for real-time updates.
 | 010 | Monorepo Structure | Accepted | High | Low |
 | 011 | No Authentication | Accepted | Low | High |
 | 012 | Polling for Real-Time | Accepted | Medium | High |
+| 013 | MongoDB Serialization | Accepted | High | Low |
+| 014 | KATO Schema Compliance | Accepted | High | Low |
+
+---
+
+## ADR-013: MongoDB ObjectId Serialization Pattern
+
+**Date**: 2025-10-10
+**Status**: Accepted
+**Confidence**: High
+
+### Context
+MongoDB's ObjectId type is not JSON serializable by default. FastAPI returns 500 errors when trying to serialize documents containing ObjectId fields (_id and other ObjectId references).
+
+### Decision
+Create a recursive `serialize_mongo_doc()` helper function that converts all ObjectId instances to strings before returning MongoDB documents from API endpoints.
+
+### Rationale
+- **Prevents 500 errors**: Ensures all MongoDB documents can be serialized to JSON
+- **Recursive handling**: Handles ObjectId in nested objects and arrays
+- **Consistent pattern**: Apply to all MongoDB endpoints returning documents
+- **Simple implementation**: ~30 lines of code, easy to understand and maintain
+- **No performance impact**: Serialization happens in memory before response
+
+### Alternatives Considered
+- **Custom JSON encoder**: More complex, requires FastAPI configuration changes
+- **Pydantic models**: Would need models for every document type, rigid schema
+- **BSON to JSON conversion**: External library dependency, overkill for this use case
+- **String _id in queries**: Would break MongoDB queries, not a real solution
+
+### Implementation
+```python
+def serialize_mongo_doc(doc: Dict[str, Any]) -> Dict[str, Any]:
+    """Recursively convert MongoDB ObjectId to string for JSON serialization."""
+    if doc is None:
+        return None
+
+    serialized = {}
+    for key, value in doc.items():
+        if isinstance(value, ObjectId):
+            serialized[key] = str(value)
+        elif isinstance(value, dict):
+            serialized[key] = serialize_mongo_doc(value)
+        elif isinstance(value, list):
+            serialized[key] = [
+                serialize_mongo_doc(item) if isinstance(item, dict)
+                else str(item) if isinstance(item, ObjectId)
+                else item
+                for item in value
+            ]
+        else:
+            serialized[key] = value
+
+    return serialized
+```
+
+### Consequences
+- Positive: All MongoDB endpoints work reliably, simple to apply
+- Negative: Slight performance overhead (negligible), converts ObjectId to string (acceptable)
+- Trade-offs: ObjectId loses type information but gains JSON compatibility
+
+### Related Issues
+Fixed MongoDB pattern display bug where all pattern endpoints returned 500 errors.
+
+---
+
+## ADR-014: KATO Superknowledgebase Schema Compliance
+
+**Date**: 2025-10-10
+**Status**: Accepted
+**Confidence**: High
+
+### Context
+Initial implementation made assumptions about MongoDB pattern schema (expected `pattern` field with text data). Actual KATO Superknowledgebase uses different schema: `name` (hash identifier), `pattern_data` (any type), `length`, `emotives`, `metadata`.
+
+### Decision
+Align all frontend interfaces and backend code with verified KATO Superknowledgebase schema. Use only documented core fields, handle any data type in `pattern_data`.
+
+### Rationale
+- **Correctness**: Matches actual production data structure
+- **Flexibility**: Supports any data type (text, arrays, objects)
+- **Future-proof**: Won't break when pattern data varies
+- **Documentation**: Establishes verified schema for future development
+- **No assumptions**: Based on actual MongoDB document inspection
+
+### Schema Specification
+```typescript
+interface Pattern {
+  _id: string              // MongoDB ObjectId (serialized)
+  name: string             // Hash identifier (e.g., "1a2b3c4d...")
+  pattern_data: any        // Actual pattern (any type)
+  length: number           // Pattern length
+  emotives?: any           // Emotional components (optional)
+  metadata?: any           // Additional metadata (optional)
+}
+```
+
+### Alternatives Considered
+- **Keep original schema**: Would remain broken, not based on reality
+- **Multiple schemas**: Overcomplicated, KATO has one schema
+- **Text-only patterns**: Too restrictive, doesn't match real data
+
+### Implementation Changes
+1. Updated Pattern TypeScript interface to match KATO schema
+2. Created `getPatternIdentifier()` helper using `name` field
+3. Updated pattern list to show hash names and core fields
+4. Updated detail modal to display any data type using JSON.stringify()
+5. Removed assumptions about text-only patterns
+
+### Consequences
+- Positive: Works with real KATO data, supports all data types, future-proof
+- Negative: None (this is the correct approach)
+- Trade-offs: More generic display (JSON) vs custom rendering (would be fragile)
+
+### Verified Facts Documented
+- Pattern `name` field contains hash identifier
+- Pattern `pattern_data` can be any type (text, array, object, nested)
+- Core fields: name, pattern_data, length, emotives (optional), metadata (optional)
+- Confidence level: HIGH (verified with production data)
+
+### Related Issues
+Fixed MongoDB pattern display bug where frontend expected wrong schema.
 
 ---
 
@@ -451,4 +573,4 @@ Use HTTP polling with 5-10 second intervals for real-time updates.
 
 ---
 
-Last updated: 2025-10-06
+Last updated: 2025-10-10
