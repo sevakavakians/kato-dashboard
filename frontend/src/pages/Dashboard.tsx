@@ -31,6 +31,13 @@ export default function Dashboard() {
   const metrics = wsMetrics || httpMetrics
   const metricsLoading = !metrics && !isConnected
 
+  // Fetch container stats (replaces psutil-based resource metrics)
+  const { data: containerStats } = useQuery({
+    queryKey: ['containerStats'],
+    queryFn: () => apiClient.getContainerStats(),
+    refetchInterval: 5000, // Refetch every 5 seconds
+  })
+
   // Fetch stats for charts (keep using polling for historical data)
   const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: ['stats', 10],
@@ -62,10 +69,10 @@ export default function Dashboard() {
   const cpuData = stats?.time_series?.kato_cpu_usage_percent || []
   const memoryData = stats?.time_series?.kato_memory_usage_percent || []
 
-  // Check if system resource metrics are available
-  // Note: CPU is currently broken in KATO (returns 0.0), but memory and disk work
-  const hasCpuMetrics = (metrics?.resources?.cpu_percent ?? 0) > 0
-  const hasMemoryMetrics = (metrics?.resources?.memory_percent ?? 0) > 0
+  // Use container stats for real-time metrics (replaces broken psutil metrics)
+  const containerCpuPercent = containerStats?.aggregated?.total_cpu_percent || 0
+  const containerMemoryPercent = containerStats?.aggregated?.total_memory_percent || 0
+  const hasContainerStats = containerStats && containerStats.containers?.length > 0
   const hasTimeSeriesData = cpuData.length > 0 || memoryData.length > 0
 
   return (
@@ -112,24 +119,72 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* CPU Metric Notice (Memory and Disk work, but CPU returns 0.0) */}
-      {!hasCpuMetrics && hasMemoryMetrics && (
+      {/* Container Resource Metrics */}
+      {hasContainerStats && (
         <Card>
+          <CardHeader>
+            <CardTitle>Container Resources (Docker Stats)</CardTitle>
+          </CardHeader>
           <CardContent>
-            <div className="py-6 text-center">
-              <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-yellow-100 dark:bg-yellow-900/20 mb-3">
-                <svg className="w-5 h-5 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Aggregated Stats */}
+              <div className="border-l-4 border-blue-500 pl-4">
+                <h4 className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                  Total CPU Usage
+                </h4>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-2">
+                  {containerCpuPercent.toFixed(2)}%
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Across {containerStats?.containers?.length || 0} containers
+                </p>
               </div>
-              <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-2">
-                CPU Metrics Currently Unavailable
-              </h3>
-              <p className="text-sm text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
-                KATO's CPU monitoring returns 0% due to a <code className="px-1 py-0.5 bg-gray-100 dark:bg-gray-800 rounded text-xs">psutil</code> async context issue.
-                Memory ({metrics?.resources?.memory_percent?.toFixed(1)}%) and disk ({metrics?.resources?.disk_percent?.toFixed(1)}%) metrics are working correctly.
-                See <code className="px-1 py-0.5 bg-gray-100 dark:bg-gray-800 rounded text-xs">KATO_ISSUES.md</code> for fix details.
-              </p>
+
+              <div className="border-l-4 border-green-500 pl-4">
+                <h4 className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                  Total Memory Usage
+                </h4>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-2">
+                  {containerMemoryPercent.toFixed(2)}%
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {containerStats?.aggregated?.total_memory_mb?.toFixed(0) || 0} MB / {containerStats?.aggregated?.total_memory_limit_mb?.toFixed(0) || 0} MB
+                </p>
+              </div>
+            </div>
+
+            {/* Individual Container Stats */}
+            <div className="mt-6 space-y-3">
+              <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                Container Breakdown
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {containerStats?.containers?.map((container: any) => (
+                  <div
+                    key={container.name}
+                    className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
+                  >
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900 dark:text-white">
+                          {container.name}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          {container.status}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-semibold text-blue-600 dark:text-blue-400">
+                          {container.cpu?.toFixed(2)}%
+                        </p>
+                        <p className="text-xs text-gray-600 dark:text-gray-400">
+                          {container.memory?.usage_mb?.toFixed(0)} MB
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </CardContent>
         </Card>

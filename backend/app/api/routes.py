@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Query
 from app.services.kato_api import get_kato_client
 from app.services import analytics
 from app.services.session_manager import get_session_manager
+from app.services.docker_stats import get_docker_stats_client
 from app.db.mongodb import (
     get_processor_databases,
     get_patterns,
@@ -105,6 +106,45 @@ async def get_distributed_stm_statistics():
     """Get distributed STM statistics"""
     client = get_kato_client()
     return await client.get_distributed_stm_stats()
+
+
+@router.get("/system/container-stats")
+async def get_container_statistics(use_cache: bool = True):
+    """
+    Get Docker container statistics for all KATO services
+
+    Returns real-time CPU, memory, network, and disk I/O metrics
+    for KATO, MongoDB, Qdrant, and Redis containers.
+    """
+    try:
+        docker_client = get_docker_stats_client()
+        stats = docker_client.get_all_kato_stats(use_cache=use_cache)
+
+        if 'error' in stats:
+            raise HTTPException(status_code=503, detail=stats['error'])
+
+        return stats
+    except Exception as e:
+        logger.error(f"Failed to get container stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/system/container-stats/{container_name}")
+async def get_single_container_stats(container_name: str):
+    """Get statistics for a specific container"""
+    try:
+        docker_client = get_docker_stats_client()
+        stats = docker_client.get_container_stats(container_name)
+
+        if not stats:
+            raise HTTPException(status_code=404, detail=f"Container {container_name} not found")
+
+        return stats
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get stats for {container_name}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============================================================================

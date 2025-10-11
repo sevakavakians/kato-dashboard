@@ -71,6 +71,18 @@ class APIClient {
     return data
   }
 
+  async getContainerStats(useCache = true) {
+    const { data } = await this.client.get('/system/container-stats', {
+      params: { use_cache: useCache },
+    })
+    return data
+  }
+
+  async getSingleContainerStats(containerName: string) {
+    const { data } = await this.client.get(`/system/container-stats/${containerName}`)
+    return data
+  }
+
   // Sessions
   async getSessionsCount() {
     const { data } = await this.client.get('/sessions/count')
