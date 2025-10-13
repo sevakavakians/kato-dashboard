@@ -14,6 +14,8 @@ import {
   Info
 } from 'lucide-react'
 import { apiClient } from '../lib/api'
+import { useWebSocket } from '../hooks/useWebSocket'
+import SessionEventNotifications from '../components/SessionEventNotifications'
 
 interface Session {
   session_id: string
@@ -37,12 +39,21 @@ export default function Sessions() {
   const pageSize = 20
   const queryClient = useQueryClient()
 
-  // Fetch KATO session count
-  const { data: katoCount } = useQuery({
+  // Use WebSocket for session count and events (Phase 2 & 4: with subscriptions)
+  const { sessionSummary, sessionEvents, isConnected } = useWebSocket(true, undefined, ['sessions', 'session_events'])
+
+  // Fallback: Fetch KATO session count via HTTP if WebSocket not connected
+  const { data: httpKatoCount } = useQuery({
     queryKey: ['sessions-count'],
     queryFn: () => apiClient.getSessionsCount(),
-    refetchInterval: 10000,
+    enabled: !isConnected, // Only query if WebSocket not connected
+    refetchInterval: 10000, // Fallback polling
   })
+
+  // Use WebSocket data if available, otherwise use HTTP fallback
+  const katoCount = isConnected && sessionSummary
+    ? { active_sessions: sessionSummary.active_count }
+    : httpKatoCount
 
   // Fetch Redis session list
   const { data: redisData, isLoading, error, refetch } = useQuery({
@@ -141,6 +152,9 @@ export default function Sessions() {
 
   return (
     <div>
+      {/* Session Event Notifications (Phase 2) */}
+      <SessionEventNotifications events={sessionEvents} />
+
       {/* Header */}
       <div className="flex justify-between items-start mb-6">
         <div>

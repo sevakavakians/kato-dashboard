@@ -44,6 +44,19 @@ class Settings(BaseSettings):
     cache_ttl_seconds: int = Field(default=30, env="CACHE_TTL_SECONDS")
     max_cache_size: int = Field(default=1000, env="MAX_CACHE_SIZE")
 
+    # WebSocket Feature Flags
+    websocket_enabled: bool = Field(default=True, env="WEBSOCKET_ENABLED")
+    websocket_container_stats: bool = Field(default=True, env="WEBSOCKET_CONTAINER_STATS")
+    websocket_session_events: bool = Field(default=True, env="WEBSOCKET_SESSION_EVENTS")
+    websocket_system_alerts: bool = Field(default=True, env="WEBSOCKET_SYSTEM_ALERTS")
+    websocket_selective_subscriptions: bool = Field(default=True, env="WEBSOCKET_SELECTIVE_SUBSCRIPTIONS")
+
+    # Alert Thresholds (Phase 3)
+    alert_cpu_threshold: float = Field(default=80.0, env="ALERT_CPU_THRESHOLD")
+    alert_memory_threshold: float = Field(default=85.0, env="ALERT_MEMORY_THRESHOLD")
+    alert_error_rate_threshold: float = Field(default=0.05, env="ALERT_ERROR_RATE_THRESHOLD")
+    alert_cooldown_seconds: int = Field(default=60, env="ALERT_COOLDOWN_SECONDS")
+
     class Config:
         env_file = ".env"
         case_sensitive = False

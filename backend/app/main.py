@@ -103,13 +103,19 @@ async def websocket_endpoint(websocket: WebSocket):
 
     Clients connect to this endpoint to receive:
     - System metrics updates every 3 seconds
+    - Session events when sessions are created/destroyed (Phase 2)
+    - System alerts when thresholds are exceeded (Phase 3)
     - Heartbeat messages to maintain connection
 
-    Message format:
+    Client can send messages:
+    - "ping" - Receives heartbeat response
+    - {"type": "subscribe", "subscriptions": ["metrics", "containers"]} - Subscribe to specific data (Phase 4)
+
+    Message format (server to client):
     {
-        "type": "metrics_update" | "heartbeat",
+        "type": "realtime_update" | "session_event" | "system_alert" | "heartbeat",
         "timestamp": "ISO-8601 timestamp",
-        "data": {...}  // For metrics_update
+        "data": {...}  // For realtime_update
     }
     """
     manager = get_connection_manager()
@@ -118,14 +124,28 @@ async def websocket_endpoint(websocket: WebSocket):
     try:
         while True:
             # Keep connection alive by receiving messages
-            # Client can send ping messages or other commands
+            # Client can send ping messages, subscription requests, or other commands
             data = await websocket.receive_text()
 
             # Handle different message types
             if data == "ping":
                 await manager.send_heartbeat(websocket)
+            else:
+                # Try to parse as JSON for structured messages
+                try:
+                    import json
+                    message = json.loads(data)
 
-            # Additional message handlers can be added here
+                    # Handle subscription message (Phase 4)
+                    if message.get("type") == "subscribe":
+                        subscriptions = message.get("subscriptions", [])
+                        manager.handle_subscription(websocket, subscriptions)
+                        logger.info(f"Client subscribed to: {subscriptions}")
+
+                    # Additional message handlers can be added here
+
+                except json.JSONDecodeError:
+                    logger.warning(f"Received non-JSON message: {data}")
 
     except WebSocketDisconnect:
         manager.disconnect(websocket)

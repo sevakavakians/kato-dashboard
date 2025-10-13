@@ -7,14 +7,64 @@ const WS_URL = import.meta.env.VITE_API_URL
   : 'ws://localhost:8080/ws'
 
 export type WebSocketMessage = {
-  type: 'metrics_update' | 'heartbeat'
+  type: 'metrics_update' | 'realtime_update' | 'session_event' | 'system_alert' | 'heartbeat'
   timestamp: string
   data?: any
+}
+
+export type RealtimeUpdateMessage = {
+  type: 'realtime_update'
+  timestamp: string
+  data: {
+    metrics?: any
+    containers?: any
+    sessions?: {
+      active_count: number
+      total_count: number
+    }
+  }
+}
+
+export type SessionEventMessage = {
+  type: 'session_event'
+  event_type: 'session_created' | 'session_destroyed'
+  timestamp: string
+  data: {
+    current_count: number
+    previous_count: number
+    delta: number
+    time_since_last_event: number
+  }
+}
+
+export type SystemAlert = {
+  level: 'info' | 'warning' | 'error'
+  type: string
+  message: string
+  value?: number
+  threshold?: number
+  container_name?: string
+  status?: string
+}
+
+export type SystemAlertMessage = {
+  type: 'system_alert'
+  id: string
+  timestamp: string
+  alerts: SystemAlert[]
 }
 
 export type WebSocketStatus = 'connecting' | 'connected' | 'disconnected' | 'error'
 
 export type WebSocketCallback = (message: WebSocketMessage) => void
+
+// Phase 4: Subscription types
+export type SubscriptionType = 'metrics' | 'containers' | 'sessions' | 'session_events' | 'system_alerts'
+
+export type SubscriptionMessage = {
+  type: 'subscribe'
+  subscriptions: SubscriptionType[]
+}
 
 export class WebSocketClient {
   private ws: WebSocket | null = null
@@ -29,6 +79,7 @@ export class WebSocketClient {
   private status: WebSocketStatus = 'disconnected'
   private statusCallbacks: Set<(status: WebSocketStatus) => void> = new Set()
   private shouldReconnect = true
+  private subscriptions: SubscriptionType[] = [] // Phase 4: Track subscriptions
 
   constructor(url: string = WS_URL) {
     this.url = url
@@ -55,6 +106,11 @@ export class WebSocketClient {
         this.reconnectAttempts = 0
         this.reconnectDelay = 1000
         this.startHeartbeat()
+
+        // Phase 4: Send subscriptions after connecting
+        if (this.subscriptions.length > 0) {
+          this.sendSubscriptions()
+        }
       }
 
       this.ws.onmessage = (event) => {
@@ -113,6 +169,35 @@ export class WebSocketClient {
     } else {
       console.warn('WebSocket not connected, cannot send message')
     }
+  }
+
+  /**
+   * Subscribe to specific data types (Phase 4)
+   */
+  setSubscriptions(subscriptions: SubscriptionType[]): void {
+    this.subscriptions = subscriptions
+
+    // If already connected, send subscriptions immediately
+    if (this.isConnected()) {
+      this.sendSubscriptions()
+    }
+  }
+
+  /**
+   * Send subscription message to server (Phase 4)
+   */
+  private sendSubscriptions(): void {
+    if (this.subscriptions.length === 0) {
+      return
+    }
+
+    const message: SubscriptionMessage = {
+      type: 'subscribe',
+      subscriptions: this.subscriptions
+    }
+
+    console.log('Sending subscriptions:', this.subscriptions)
+    this.send(JSON.stringify(message))
   }
 
   /**

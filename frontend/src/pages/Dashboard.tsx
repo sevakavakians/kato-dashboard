@@ -14,10 +14,16 @@ import {
   Area,
 } from 'recharts'
 import { useWebSocket } from '../hooks/useWebSocket'
+import SystemAlertNotifications from '../components/SystemAlertNotifications'
 
 export default function Dashboard() {
-  // Use WebSocket for real-time metrics (replaces polling)
-  const { data: wsMetrics, isConnected } = useWebSocket(true)
+  // Use WebSocket for real-time metrics, container stats, and alerts (Phase 4: with subscriptions)
+  const {
+    data: wsMetrics,
+    containerStats: wsContainerStats,
+    systemAlerts,
+    isConnected
+  } = useWebSocket(true, undefined, ['metrics', 'containers', 'system_alerts'])
 
   // Fallback: Fetch metrics via HTTP if WebSocket is not connected
   const { data: httpMetrics } = useQuery({
@@ -27,16 +33,18 @@ export default function Dashboard() {
     refetchInterval: 5000, // Fallback polling
   })
 
-  // Use WebSocket data if available, otherwise use HTTP fallback
-  const metrics = wsMetrics || httpMetrics
-  const metricsLoading = !metrics && !isConnected
-
-  // Fetch container stats (replaces psutil-based resource metrics)
-  const { data: containerStats } = useQuery({
+  // Fallback: Fetch container stats via HTTP if WebSocket is not connected
+  const { data: httpContainerStats } = useQuery({
     queryKey: ['containerStats'],
     queryFn: () => apiClient.getContainerStats(),
-    refetchInterval: 5000, // Refetch every 5 seconds
+    enabled: !isConnected, // Only query if WebSocket not connected
+    refetchInterval: 5000, // Fallback polling
   })
+
+  // Use WebSocket data if available, otherwise use HTTP fallback
+  const metrics = wsMetrics || httpMetrics
+  const containerStats = wsContainerStats || httpContainerStats
+  const metricsLoading = !metrics && !isConnected
 
   // Fetch stats for charts (keep using polling for historical data)
   const { data: stats, isLoading: statsLoading } = useQuery({
@@ -77,6 +85,9 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {/* System Alert Toast Notifications (Phase 3) */}
+      <SystemAlertNotifications alerts={systemAlerts} />
+
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
