@@ -7,7 +7,6 @@ import {
   WebSocketMessage,
   WebSocketStatus,
   WebSocketCallback,
-  SystemAlert,
   SystemAlertMessage,
   SubscriptionType,
 } from '../lib/websocket'

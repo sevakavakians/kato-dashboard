@@ -26,7 +26,7 @@ The script will:
 
 ## Access the Dashboard
 
-- **Dashboard UI**: http://localhost:3000
+- **Dashboard UI**: http://localhost:3001
 - **Backend API**: http://localhost:8080
 - **API Documentation**: http://localhost:8080/docs
 
@@ -81,7 +81,7 @@ make health
 
 # Manual checks
 curl http://localhost:8080/health
-curl http://localhost:3000/health
+curl http://localhost:3001/health
 ```
 
 ## Development Mode
@@ -201,7 +201,7 @@ make help
 
 ## Next Steps
 
-1. **Explore the UI** at http://localhost:3000
+1. **Explore the UI** at http://localhost:3001
 2. **Check API docs** at http://localhost:8080/docs
 3. **View metrics** in real-time on the dashboard
 4. **Monitor sessions** in the Sessions tab

@@ -10,7 +10,6 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
 from app.api.routes import router
-from app.db.mongodb import get_mongo_client, close_mongo_client
 from app.db.redis_client import get_redis_client, close_redis_client
 from app.db.qdrant import get_qdrant_client
 from app.services.kato_api import close_kato_client
@@ -30,13 +29,13 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     logger.info(f"Starting {settings.app_name} v{settings.app_version}")
 
-    # Initialize database connections
-    try:
-        await get_mongo_client()
-        logger.info("MongoDB connection initialized")
-    except Exception as e:
-        logger.error(f"MongoDB connection failed: {e}")
+    # Security check: Warn about default passwords/secrets
+    if settings.admin_password == "changeme":
+        logger.warning("⚠️  SECURITY WARNING: Using default admin password 'changeme'! Change this in production!")
+    if "your-secret-key" in settings.secret_key or "change" in settings.secret_key.lower():
+        logger.warning("⚠️  SECURITY WARNING: Using default secret key! Change SECRET_KEY in production!")
 
+    # Initialize database connections
     try:
         await get_redis_client()
         logger.info("Redis connection initialized")
@@ -55,7 +54,6 @@ async def lifespan(app: FastAPI):
 
     # Cleanup
     logger.info("Shutting down KATO Dashboard Backend")
-    await close_mongo_client()
     await close_redis_client()
     await close_kato_client()
     logger.info("Connections closed")

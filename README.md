@@ -6,7 +6,7 @@ A comprehensive web-based monitoring and management dashboard for the KATO AI sy
 
 - **Real-Time Monitoring**: Live system metrics, performance stats, and resource usage
 - **Session Management**: View and manage active KATO sessions
-- **Database Analytics**: Browse and analyze MongoDB patterns, Qdrant vectors, and Redis cache
+- **Database Analytics**: Browse and analyze ClickHouse patterns, Qdrant vectors, and Redis cache
 - **Performance Insights**: Detailed charts and visualizations for system performance
 - **Pattern Analysis**: Explore learned patterns, frequencies, and emotive data
 
@@ -57,7 +57,7 @@ make start
 
 ### 4. Access Dashboard
 
-- **Frontend**: http://localhost:3000
+- **Frontend**: http://localhost:3001
 - **Backend API**: http://localhost:8080
 - **API Docs**: http://localhost:8080/docs
 
@@ -156,12 +156,13 @@ make install-frontend
 - `GET /api/v1/sessions/{id}` - Session details
 - `GET /api/v1/sessions/{id}/stm` - Session short-term memory
 
-### MongoDB
-- `GET /api/v1/databases/mongodb/processors` - List all processors
-- `GET /api/v1/databases/mongodb/{processor_id}/patterns` - Get patterns
-- `GET /api/v1/databases/mongodb/{processor_id}/statistics` - Pattern statistics
-- `PUT /api/v1/databases/mongodb/{processor_id}/patterns/{id}` - Update pattern
-- `DELETE /api/v1/databases/mongodb/{processor_id}/patterns/{id}` - Delete pattern
+### Hybrid Patterns (ClickHouse + Redis)
+- `GET /api/v1/databases/patterns/processors` - List all knowledgebases
+- `GET /api/v1/databases/patterns/{kb_id}/patterns` - Get patterns (pagination, search, sorting)
+- `GET /api/v1/databases/patterns/{kb_id}/statistics` - Pattern statistics
+- `DELETE /api/v1/databases/patterns/{kb_id}/patterns/{pattern_name}` - Delete single pattern
+- `POST /api/v1/databases/patterns/{kb_id}/patterns/bulk-delete` - Bulk delete patterns
+- `DELETE /api/v1/databases/patterns/{kb_id}` - Delete entire knowledgebase
 
 ### Qdrant
 - `GET /api/v1/databases/qdrant/collections` - List all collections
@@ -183,8 +184,8 @@ make install-frontend
 KATO_API_URL=http://kato:8000
 
 # Databases (Read-Only)
-MONGO_URL=mongodb://mongodb:27017
-MONGO_READ_ONLY=true
+# MONGO_URL (removed)=mongodb://mongodb:27017
+DATABASE_READ_ONLY=true
 QDRANT_URL=http://qdrant:6333
 REDIS_URL=redis://redis:6379
 
@@ -199,7 +200,7 @@ ADMIN_PASSWORD=changeme
 SECRET_KEY=your-secret-key
 
 # CORS
-CORS_ORIGINS=http://localhost:3000
+CORS_ORIGINS=http://localhost:3001
 
 # Cache
 CACHE_TTL_SECONDS=30
@@ -214,7 +215,7 @@ VITE_API_URL=http://localhost:8080
 
 ## Security
 
-- **Read-Only Mode**: By default, MongoDB connections are read-only
+- **Read-Only Mode**: By default, ClickHouse connections are read-only
 - **Admin Authentication**: (Optional) JWT-based authentication for admin operations
 - **CORS**: Configured to allow only specified origins
 - **Rate Limiting**: (TODO) Implement rate limiting for destructive operations
@@ -229,7 +230,7 @@ VITE_API_URL=http://localhost:8080
 
 ### Database connection errors
 
-1. Check that MongoDB, Qdrant, and Redis are accessible from the dashboard network
+1. Check that ClickHouse, Qdrant, and Redis are accessible from the dashboard network
 2. Verify connection URLs in environment variables
 3. Check logs: `docker-compose logs dashboard-backend`
 

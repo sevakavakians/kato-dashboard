@@ -133,160 +133,6 @@ class APIClient {
     return data
   }
 
-  // MongoDB
-  async getProcessors() {
-    const { data } = await this.client.get('/databases/mongodb/processors')
-    return data
-  }
-
-  async getPatterns(
-    processorId: string,
-    skip = 0,
-    limit = 100,
-    sortBy = 'frequency',
-    sortOrder = -1
-  ) {
-    const { data } = await this.client.get(
-      `/databases/mongodb/${processorId}/patterns`,
-      {
-        params: { skip, limit, sort_by: sortBy, sort_order: sortOrder },
-      }
-    )
-    return data
-  }
-
-  async getPattern(processorId: string, patternId: string) {
-    const { data } = await this.client.get(
-      `/databases/mongodb/${processorId}/patterns/${patternId}`
-    )
-    return data
-  }
-
-  async updatePattern(
-    processorId: string,
-    patternId: string,
-    updates: Record<string, any>
-  ) {
-    const { data } = await this.client.put(
-      `/databases/mongodb/${processorId}/patterns/${patternId}`,
-      updates
-    )
-    return data
-  }
-
-  async deletePattern(processorId: string, patternId: string) {
-    const { data } = await this.client.delete(
-      `/databases/mongodb/${processorId}/patterns/${patternId}`
-    )
-    return data
-  }
-
-  async getPatternStatistics(processorId: string) {
-    const { data } = await this.client.get(
-      `/databases/mongodb/${processorId}/statistics`
-    )
-    return data
-  }
-
-  async bulkDeletePatterns(processorId: string, patternIds: string[]) {
-    const { data } = await this.client.post(
-      `/databases/mongodb/${processorId}/patterns/bulk-delete`,
-      { pattern_ids: patternIds }
-    )
-    return data
-  }
-
-  async listCollections(processorId: string) {
-    const { data } = await this.client.get(
-      `/databases/mongodb/${processorId}/collections`
-    )
-    return data
-  }
-
-  async deleteCollection(processorId: string, collectionName: string) {
-    const { data } = await this.client.delete(
-      `/databases/mongodb/${processorId}/collections/${collectionName}`
-    )
-    return data
-  }
-
-  async deleteProcessor(processorId: string) {
-    const { data } = await this.client.delete(
-      `/databases/mongodb/processors/${processorId}`
-    )
-    return data
-  }
-
-  async getCollectionDocuments(
-    processorId: string,
-    collectionName: string,
-    skip = 0,
-    limit = 100,
-    sortBy = '_id',
-    sortOrder = -1
-  ) {
-    const { data } = await this.client.get(
-      `/databases/mongodb/${processorId}/collections/${collectionName}/documents`,
-      {
-        params: { skip, limit, sort_by: sortBy, sort_order: sortOrder },
-      }
-    )
-    return data
-  }
-
-  async getCollectionDocument(
-    processorId: string,
-    collectionName: string,
-    documentId: string
-  ) {
-    const { data } = await this.client.get(
-      `/databases/mongodb/${processorId}/collections/${collectionName}/documents/${documentId}`
-    )
-    return data
-  }
-
-  async updateCollectionDocument(
-    processorId: string,
-    collectionName: string,
-    documentId: string,
-    updates: Record<string, any>
-  ) {
-    const { data } = await this.client.put(
-      `/databases/mongodb/${processorId}/collections/${collectionName}/documents/${documentId}`,
-      updates
-    )
-    return data
-  }
-
-  async deleteCollectionDocument(
-    processorId: string,
-    collectionName: string,
-    documentId: string
-  ) {
-    const { data } = await this.client.delete(
-      `/databases/mongodb/${processorId}/collections/${collectionName}/documents/${documentId}`
-    )
-    return data
-  }
-
-  async bulkDeleteCollectionDocuments(
-    processorId: string,
-    collectionName: string,
-    documentIds: string[]
-  ) {
-    const { data } = await this.client.post(
-      `/databases/mongodb/${processorId}/collections/${collectionName}/documents/bulk-delete`,
-      { document_ids: documentIds }
-    )
-    return data
-  }
-
-  async getCollectionStatistics(processorId: string, collectionName: string) {
-    const { data } = await this.client.get(
-      `/databases/mongodb/${processorId}/collections/${collectionName}/statistics`
-    )
-    return data
-  }
 
   // Qdrant
   async getQdrantCollections() {
@@ -477,6 +323,108 @@ class APIClient {
         performance_period_minutes: performancePeriodMinutes,
       },
     })
+    return data
+  }
+
+  // ========================================================================
+  // Hybrid Pattern Endpoints (ClickHouse + Redis)
+  // ========================================================================
+
+  async getHybridProcessors() {
+    const { data } = await this.client.get('/databases/patterns/processors')
+    return data
+  }
+
+  async getHybridPatterns(
+    kbId: string,
+    skip = 0,
+    limit = 100,
+    sortBy = 'length',
+    sortOrder = -1
+  ) {
+    const { data } = await this.client.get(
+      `/databases/patterns/${kbId}/patterns`,
+      {
+        params: {
+          skip,
+          limit,
+          sort_by: sortBy,
+          sort_order: sortOrder,
+        },
+      }
+    )
+    return data
+  }
+
+  async getHybridPatternDetail(kbId: string, patternName: string) {
+    const { data } = await this.client.get(
+      `/databases/patterns/${kbId}/patterns/${patternName}`
+    )
+    return data
+  }
+
+  async getHybridPatternStatistics(kbId: string) {
+    const { data } = await this.client.get(
+      `/databases/patterns/${kbId}/statistics`
+    )
+    return data
+  }
+
+  async deleteHybridPattern(kbId: string, patternName: string) {
+    const { data } = await this.client.delete(
+      `/databases/patterns/${kbId}/patterns/${patternName}`
+    )
+    return data
+  }
+
+  async bulkDeleteHybridPatterns(kbId: string, patternNames: string[]) {
+    const { data } = await this.client.post(
+      `/databases/patterns/${kbId}/patterns/bulk-delete`,
+      { pattern_names: patternNames }
+    )
+    return data
+  }
+
+  async deleteKnowledgebase(kbId: string) {
+    const { data } = await this.client.delete(
+      `/databases/patterns/${kbId}`
+    )
+    return data
+  }
+
+  async getHybridHealth() {
+    const { data } = await this.client.get('/databases/hybrid/health')
+    return data
+  }
+
+  // ========================================================================
+  // Symbol Statistics Endpoints (Redis-backed symbols_kb)
+  // ========================================================================
+
+  async getSymbolProcessors() {
+    const { data } = await this.client.get('/databases/symbols/processors')
+    return data
+  }
+
+  async getSymbols(
+    kbId: string,
+    skip = 0,
+    limit = 100,
+    sortBy = 'frequency',
+    sortOrder = -1,
+    search?: string
+  ) {
+    const { data } = await this.client.get(
+      `/databases/symbols/${kbId}`,
+      {
+        params: { skip, limit, sort_by: sortBy, sort_order: sortOrder, search }
+      }
+    )
+    return data
+  }
+
+  async getSymbolStatistics(kbId: string) {
+    const { data } = await this.client.get(`/databases/symbols/${kbId}/statistics`)
     return data
   }
 }

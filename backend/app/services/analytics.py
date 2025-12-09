@@ -5,7 +5,7 @@ import logging
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 
-from app.db.mongodb import get_processor_databases, get_patterns
+from app.db.hybrid_patterns import get_processors_hybrid, get_patterns_hybrid
 from app.services.kato_api import get_kato_client
 from app.db.redis_client import get_redis_info
 
@@ -28,13 +28,13 @@ async def get_pattern_frequency_analysis(
     """
     try:
         if processor_id:
-            # Get patterns for specific processor
-            patterns_data = await get_patterns(processor_id, skip=0, limit=limit)
+            # Get patterns for specific processor (hybrid ClickHouse + Redis)
+            patterns_data = await get_patterns_hybrid(processor_id, skip=0, limit=limit)
             patterns = patterns_data.get('patterns', [])
 
             frequency_data = [
                 {
-                    'pattern': p.get('pattern', 'Unknown'),
+                    'pattern': p.get('name', 'Unknown'),
                     'frequency': p.get('frequency', 0),
                     'processor_id': processor_id
                 }
@@ -47,18 +47,18 @@ async def get_pattern_frequency_analysis(
                 'total_patterns': patterns_data.get('total', 0)
             }
         else:
-            # Get top patterns across all processors
-            processors = await get_processor_databases()
+            # Get top patterns across all processors (hybrid architecture)
+            processors = await get_processors_hybrid()
             all_patterns = []
 
             for proc in processors:
                 proc_id = proc['processor_id']
-                patterns_data = await get_patterns(proc_id, skip=0, limit=limit)
+                patterns_data = await get_patterns_hybrid(proc_id, skip=0, limit=limit)
                 patterns = patterns_data.get('patterns', [])
 
                 for p in patterns:
                     all_patterns.append({
-                        'pattern': p.get('pattern', 'Unknown'),
+                        'pattern': p.get('name', 'Unknown'),
                         'frequency': p.get('frequency', 0),
                         'processor_id': proc_id
                     })
@@ -199,25 +199,25 @@ async def get_system_performance_trends(period_minutes: int = 60) -> Dict[str, A
 
 async def get_database_statistics() -> Dict[str, Any]:
     """
-    Get aggregated database statistics across all systems
+    Get aggregated database statistics across all systems (hybrid ClickHouse + Redis)
 
     Returns:
         Dict with database statistics
     """
     try:
-        # MongoDB stats
-        processors = await get_processor_databases()
+        # ClickHouse stats (hybrid architecture)
+        processors = await get_processors_hybrid()
         total_patterns = 0
 
         for proc in processors:
-            patterns_data = await get_patterns(proc['processor_id'], skip=0, limit=1)
-            total_patterns += patterns_data.get('total', 0)
+            # Processors from hybrid return patterns_count directly
+            total_patterns += proc.get('patterns_count', 0)
 
         # Redis stats
         redis_info = await get_redis_info()
 
         return {
-            'mongodb': {
+            'clickhouse': {
                 'processors': len(processors),
                 'total_patterns': total_patterns,
                 'avg_patterns_per_processor': round(total_patterns / len(processors), 2) if processors else 0

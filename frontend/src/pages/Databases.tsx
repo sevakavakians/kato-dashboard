@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import {  Database, Search, Edit, Trash2, AlertCircle, ChevronRight, RefreshCw, CheckSquare, Square, Trash } from 'lucide-react'
+import {  Database, Search, Trash2, AlertCircle, ChevronRight, RefreshCw, CheckSquare, Square, Trash } from 'lucide-react'
 import { apiClient } from '../lib/api'
+import SymbolsBrowser from '../components/SymbolsBrowser'
 
 interface Pattern {
   _id: string
@@ -18,6 +19,7 @@ interface Pattern {
 
 interface ProcessorData {
   processor_id: string
+  kb_id?: string
   name?: string
   patterns_count?: number
 }
@@ -43,11 +45,6 @@ interface RedisKeyInfo {
   ttl: number
   value: any
   size?: number
-}
-
-interface GenericDocument {
-  _id: string
-  [key: string]: any
 }
 
 function QdrantBrowser() {
@@ -698,363 +695,23 @@ function RedisKeyBrowser() {
   )
 }
 
-interface CollectionViewerProps {
-  processorId: string
-  collectionName: string
-}
-
-function CollectionViewer({ processorId, collectionName }: CollectionViewerProps) {
-  const [page, setPage] = useState(0)
-  const [searchTerm, setSearchTerm] = useState('')
-  const [selectedDocuments, setSelectedDocuments] = useState<Set<string>>(new Set())
-  const [selectedDocumentForDetails, setSelectedDocumentForDetails] = useState<GenericDocument | null>(null)
-  const pageSize = 20
-  const queryClient = useQueryClient()
-
-  // Determine if this is the metadata collection (read-only)
-  const isMetadata = collectionName === 'metadata'
-
-  // Fetch documents
-  const { data: documentsData, isLoading: documentsLoading } = useQuery({
-    queryKey: ['collectionDocuments', processorId, collectionName, page],
-    queryFn: () => apiClient.getCollectionDocuments(processorId, collectionName, page * pageSize, pageSize),
-    refetchInterval: 15000,
-  })
-
-  // Delete document mutation
-  const deleteDocumentMutation = useMutation({
-    mutationFn: ({ documentId }: { documentId: string }) =>
-      apiClient.deleteCollectionDocument(processorId, collectionName, documentId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['collectionDocuments', processorId, collectionName] })
-    },
-  })
-
-  // Bulk delete mutation
-  const bulkDeleteMutation = useMutation({
-    mutationFn: (documentIds: string[]) =>
-      apiClient.bulkDeleteCollectionDocuments(processorId, collectionName, documentIds),
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['collectionDocuments', processorId, collectionName] })
-      setSelectedDocuments(new Set())
-      alert(`Successfully deleted ${data.deleted_count} document(s)`)
-    },
-    onError: (error: any) => {
-      alert(`Failed to delete documents: ${error.response?.data?.detail || error.message}`)
-    },
-  })
-
-  const documents: GenericDocument[] = documentsData?.documents || []
-  const total = documentsData?.total || 0
-  const totalPages = Math.ceil(total / pageSize)
-
-  const filteredDocuments = documents.filter((doc) => {
-    const searchString = JSON.stringify(doc).toLowerCase()
-    return searchString.includes(searchTerm.toLowerCase())
-  })
-
-  const handleToggleDocument = (documentId: string) => {
-    const newSelected = new Set(selectedDocuments)
-    if (newSelected.has(documentId)) {
-      newSelected.delete(documentId)
-    } else {
-      newSelected.add(documentId)
-    }
-    setSelectedDocuments(newSelected)
-  }
-
-  const handleToggleAll = () => {
-    if (selectedDocuments.size === filteredDocuments.length) {
-      setSelectedDocuments(new Set())
-    } else {
-      setSelectedDocuments(new Set(filteredDocuments.map(d => d._id)))
-    }
-  }
-
-  const handleBulkDelete = async () => {
-    if (selectedDocuments.size === 0) return
-
-    if (window.confirm(`Are you sure you want to delete ${selectedDocuments.size} document(s)? This action cannot be undone.`)) {
-      await bulkDeleteMutation.mutateAsync(Array.from(selectedDocuments))
-    }
-  }
-
-  const handleDelete = async (documentId: string) => {
-    if (window.confirm('Are you sure you want to delete this document?')) {
-      await deleteDocumentMutation.mutateAsync({ documentId })
-    }
-  }
-
-  const getDocumentDisplayText = (doc: GenericDocument): string => {
-    return doc.name || doc.title || doc._id || 'Document'
-  }
-
-  return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow">
-      {/* Header */}
-      <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-          {collectionName}
-        </h3>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          {total} document{total !== 1 ? 's' : ''}
-        </p>
-      </div>
-
-      {/* Search and Actions */}
-      {!isMetadata && (
-        <div className="p-4 border-b border-gray-200 dark:border-gray-700 space-y-3">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <input
-              type="text"
-              placeholder="Search documents..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
-          {selectedDocuments.size > 0 && (
-            <button
-              onClick={handleBulkDelete}
-              disabled={bulkDeleteMutation.isPending}
-              className="w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 text-sm"
-            >
-              <Trash className="w-4 h-4" />
-              Delete Selected ({selectedDocuments.size})
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Documents List */}
-      {documentsLoading ? (
-        <div className="p-8 text-center text-gray-500 dark:text-gray-400">
-          Loading documents...
-        </div>
-      ) : filteredDocuments.length === 0 ? (
-        <div className="p-8 text-center text-gray-500 dark:text-gray-400">
-          {searchTerm ? 'No documents found matching your search' : 'No documents available'}
-        </div>
-      ) : (
-        <>
-          {/* Select All Header (not for metadata) */}
-          {!isMetadata && (
-            <div className="p-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/50">
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleToggleAll}
-                  className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400"
-                >
-                  {selectedDocuments.size === filteredDocuments.length && filteredDocuments.length > 0 ? (
-                    <CheckSquare className="w-4 h-4" />
-                  ) : (
-                    <Square className="w-4 h-4" />
-                  )}
-                </button>
-                <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                  {selectedDocuments.size === filteredDocuments.length && filteredDocuments.length > 0
-                    ? 'Deselect All'
-                    : 'Select All'
-                  }
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* Document Rows */}
-          <div className="max-h-[400px] overflow-y-auto divide-y divide-gray-200 dark:divide-gray-700">
-            {filteredDocuments.map((doc) => (
-              <div key={doc._id} className="flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                {/* Checkbox (not for metadata) */}
-                {!isMetadata && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleToggleDocument(doc._id)
-                    }}
-                    className="p-3 text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 flex-shrink-0"
-                  >
-                    {selectedDocuments.has(doc._id) ? (
-                      <CheckSquare className="w-4 h-4" />
-                    ) : (
-                      <Square className="w-4 h-4" />
-                    )}
-                  </button>
-                )}
-
-                {/* Clickable Document Content */}
-                <button
-                  onClick={() => setSelectedDocumentForDetails(doc)}
-                  className="flex-1 p-3 text-left flex items-center justify-between group"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm text-gray-900 dark:text-white truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                      {getDocumentDisplayText(doc)}
-                    </div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400 truncate font-mono">
-                      ID: {doc._id}
-                    </div>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors flex-shrink-0 ml-2" />
-                </button>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-
-      {/* Pagination (not for metadata) */}
-      {!isMetadata && totalPages > 1 && (
-        <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
-          <button
-            onClick={() => setPage(p => Math.max(0, p - 1))}
-            disabled={page === 0}
-            className="px-3 py-1 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Previous
-          </button>
-          <span className="text-xs text-gray-600 dark:text-gray-400">
-            Page {page + 1} of {totalPages}
-          </span>
-          <button
-            onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
-            disabled={page >= totalPages - 1}
-            className="px-3 py-1 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Next
-          </button>
-        </div>
-      )}
-
-      {/* Document Detail Modal */}
-      {selectedDocumentForDetails && (
-        <DocumentDetailModal
-          document={selectedDocumentForDetails}
-          collectionName={collectionName}
-          processorId={processorId}
-          onClose={() => setSelectedDocumentForDetails(null)}
-          onEdit={isMetadata ? undefined : (doc) => {
-            // TODO: Implement edit functionality
-            console.log('Edit document:', doc)
-            setSelectedDocumentForDetails(null)
-          }}
-          onDelete={isMetadata ? undefined : (docId) => {
-            handleDelete(docId)
-            setSelectedDocumentForDetails(null)
-          }}
-          readOnly={isMetadata}
-        />
-      )}
-    </div>
-  )
-}
-
-interface DocumentDetailModalProps {
-  document: GenericDocument
-  collectionName: string
-  processorId: string
-  onClose: () => void
-  onEdit?: (document: GenericDocument) => void
-  onDelete?: (documentId: string) => void
-  readOnly?: boolean
-}
-
-function DocumentDetailModal({
-  document,
-  collectionName,
-  processorId,
-  onClose,
-  onEdit,
-  onDelete,
-  readOnly = false
-}: DocumentDetailModalProps) {
-  // Get a display name for the document
-  const getDocumentDisplayName = (doc: GenericDocument): string => {
-    return doc.name || doc.title || doc._id || 'Document'
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-        {/* Header */}
-        <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-          <div className="flex items-start justify-between">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                {getDocumentDisplayName(document)}
-              </h2>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                Collection: {collectionName} | Processor: {processorId}
-              </p>
-            </div>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-            >
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        {/* Content */}
-        <div className="p-6">
-          <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4">
-            <pre className="text-xs text-gray-900 dark:text-white overflow-auto max-h-[500px]">
-              {JSON.stringify(document, null, 2)}
-            </pre>
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex gap-3">
-          {!readOnly && onEdit && (
-            <button
-              onClick={() => {
-                onEdit(document)
-                onClose()
-              }}
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
-            >
-              <Edit className="w-4 h-4" />
-              Edit Document
-            </button>
-          )}
-          {!readOnly && onDelete && (
-            <button
-              onClick={() => {
-                onDelete(document._id)
-                onClose()
-              }}
-              className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
-            >
-              <Trash2 className="w-4 h-4" />
-              Delete Document
-            </button>
-          )}
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-gray-300 dark:bg-gray-600 text-gray-900 dark:text-white rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors"
-          >
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 interface PatternDetailModalProps {
   pattern: Pattern
   onClose: () => void
-  onEdit: (pattern: Pattern) => void
-  onDelete: (patternId: string) => void
+  onDelete: (patternName: string) => void
   processorId: string
 }
 
-function PatternDetailModal({ pattern, onClose, onEdit, onDelete, processorId }: PatternDetailModalProps) {
+function PatternDetailModal({ pattern, onClose, onDelete, processorId }: PatternDetailModalProps) {
+  // Fetch full pattern details (with emotives and metadata from Redis)
+  const { data: fullPattern, isLoading, error, refetch } = useQuery({
+    queryKey: ['hybridPatternDetail', processorId, pattern.name],
+    queryFn: () => apiClient.getHybridPatternDetail(processorId, pattern.name),
+  })
+
+  // Use fetched pattern if available, otherwise fall back to prop pattern
+  const displayPattern = fullPattern || pattern
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
@@ -1080,149 +737,173 @@ function PatternDetailModal({ pattern, onClose, onEdit, onDelete, processorId }:
           </div>
         </div>
 
+        {/* Loading State */}
+        {isLoading && (
+          <div className="p-6 flex items-center justify-center">
+            <RefreshCw className="w-8 h-8 text-blue-600 dark:text-blue-400 animate-spin" />
+            <span className="ml-3 text-gray-600 dark:text-gray-400">Loading pattern details...</span>
+          </div>
+        )}
+
+        {/* Error State */}
+        {error && (
+          <div className="p-6">
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <h3 className="text-sm font-medium text-red-800 dark:text-red-300 mb-1">
+                    Failed to load pattern details
+                  </h3>
+                  <p className="text-sm text-red-700 dark:text-red-400">
+                    {error instanceof Error ? error.message : 'Unknown error occurred'}
+                  </p>
+                  <button
+                    onClick={() => refetch()}
+                    className="mt-3 px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors"
+                  >
+                    Retry
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Content */}
-        <div className="p-6 space-y-6">
-          {/* Pattern ID */}
-          <div>
-            <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
-              Pattern ID
-            </label>
-            <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3">
-              <code className="text-sm text-gray-900 dark:text-white font-mono break-all">
-                {pattern._id}
-              </code>
-            </div>
-          </div>
-
-          {/* Pattern Name */}
-          <div>
-            <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
-              Pattern Name
-            </label>
-            <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3">
-              <code className="text-sm text-gray-900 dark:text-white font-mono break-all">
-                {pattern.name}
-              </code>
-            </div>
-          </div>
-
-          {/* Pattern Data */}
-          {pattern.pattern_data && (
+        {!isLoading && !error && (
+          <div className="p-6 space-y-6">
+            {/* Pattern ID */}
             <div>
               <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
-                Pattern Data
+                Pattern ID
               </label>
-              <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 max-h-48 overflow-y-auto">
-                <pre className="text-xs text-gray-900 dark:text-white">
-                  {JSON.stringify(pattern.pattern_data, null, 2)}
-                </pre>
-              </div>
-            </div>
-          )}
-
-          {/* Metrics Grid */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
-                Frequency
-              </label>
-              <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3">
-                <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                  {pattern.frequency}
-                </p>
+              <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3">
+                <code className="text-sm text-gray-900 dark:text-white font-mono break-all">
+                  {displayPattern._id}
+                </code>
               </div>
             </div>
 
-            {pattern.length !== undefined && (
+            {/* Pattern Name */}
+            <div>
+              <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
+                Pattern Name
+              </label>
+              <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3">
+                <code className="text-sm text-gray-900 dark:text-white font-mono break-all">
+                  {displayPattern.name}
+                </code>
+              </div>
+            </div>
+
+            {/* Pattern Data */}
+            {displayPattern.pattern_data && (
               <div>
                 <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
-                  Length
+                  Pattern Data
                 </label>
-                <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-3">
-                  <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                    {pattern.length}
+                <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 max-h-48 overflow-y-auto">
+                  <pre className="text-xs text-gray-900 dark:text-white">
+                    {JSON.stringify(displayPattern.pattern_data, null, 2)}
+                  </pre>
+                </div>
+              </div>
+            )}
+
+            {/* Metrics Grid */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
+                  Frequency
+                </label>
+                <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3">
+                  <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                    {displayPattern.frequency}
                   </p>
+                </div>
+              </div>
+
+              {displayPattern.length !== undefined && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
+                    Length
+                  </label>
+                  <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-3">
+                    <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                      {displayPattern.length}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Emotives */}
+            {displayPattern.emotives && Object.keys(displayPattern.emotives).length > 0 && (
+              <div>
+                <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
+                  Emotives
+                </label>
+                <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3">
+                  <pre className="text-xs text-gray-900 dark:text-white overflow-auto">
+                    {JSON.stringify(displayPattern.emotives, null, 2)}
+                  </pre>
+                </div>
+              </div>
+            )}
+
+            {/* Metadata (arbitrary training data fields) */}
+            {displayPattern.metadata && Object.keys(displayPattern.metadata).length > 0 && (
+              <div>
+                <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
+                  Metadata
+                </label>
+                <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 max-h-64 overflow-y-auto">
+                  <pre className="text-xs text-gray-900 dark:text-white">
+                    {JSON.stringify(displayPattern.metadata, null, 2)}
+                  </pre>
                 </div>
               </div>
             )}
           </div>
-
-          {/* Emotives */}
-          {pattern.emotives && Object.keys(pattern.emotives).length > 0 && (
-            <div>
-              <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
-                Emotives
-              </label>
-              <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3">
-                <pre className="text-xs text-gray-900 dark:text-white overflow-auto">
-                  {JSON.stringify(pattern.emotives, null, 2)}
-                </pre>
-              </div>
-            </div>
-          )}
-
-          {/* Metadata (arbitrary training data fields) */}
-          {pattern.metadata && Object.keys(pattern.metadata).length > 0 && (
-            <div>
-              <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
-                Metadata
-              </label>
-              <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 max-h-64 overflow-y-auto">
-                <pre className="text-xs text-gray-900 dark:text-white">
-                  {JSON.stringify(pattern.metadata, null, 2)}
-                </pre>
-              </div>
-            </div>
-          )}
-        </div>
+        )}
 
         {/* Actions */}
-        <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex gap-3">
-          <button
-            onClick={() => {
-              onEdit(pattern)
-              onClose()
-            }}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
-          >
-            <Edit className="w-4 h-4" />
-            Edit Pattern
-          </button>
-          <button
-            onClick={() => {
-              onDelete(pattern._id)
-              onClose()
-            }}
-            className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
-          >
-            <Trash2 className="w-4 h-4" />
-            Delete Pattern
-          </button>
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-gray-300 dark:bg-gray-600 text-gray-900 dark:text-white rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors"
-          >
-            Close
-          </button>
-        </div>
+        {!isLoading && !error && (
+          <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex gap-3">
+            <button
+              onClick={() => {
+                onDelete(pattern.name)
+                onClose()
+              }}
+              className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete Pattern
+            </button>
+            <button
+              onClick={onClose}
+              className="flex-1 px-4 py-2 bg-gray-300 dark:bg-gray-600 text-gray-900 dark:text-white rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
 }
 
 export default function Databases() {
-  const [selectedTab, setSelectedTab] = useState<'mongodb' | 'qdrant' | 'redis'>('mongodb')
+  const [selectedTab, setSelectedTab] = useState<'patterns' | 'symbols' | 'qdrant' | 'redis'>('patterns')
   const [selectedProcessor, setSelectedProcessor] = useState<string | null>(null)
   const [page, setPage] = useState(0)
   const [searchTerm, setSearchTerm] = useState('')
-  const [editingPattern, setEditingPattern] = useState<Pattern | null>(null)
-  const [editFormData, setEditFormData] = useState<Record<string, any>>({})
   const [selectedPatterns, setSelectedPatterns] = useState<Set<string>>(new Set())
-  const [selectedCollections, setSelectedCollections] = useState<Set<string>>(new Set())
   const [selectedProcessors, setSelectedProcessors] = useState<Set<string>>(new Set())
-  const [showCollections, setShowCollections] = useState(false)
   const [selectedPatternForDetails, setSelectedPatternForDetails] = useState<Pattern | null>(null)
-  const [collectionsToView, setCollectionsToView] = useState<Set<string>>(new Set())
+  const [sortBy, setSortBy] = useState<'length' | 'token_count' | 'frequency'>('length')
+  const [sortOrder, setSortOrder] = useState<1 | -1>(-1)
   const pageSize = 20
   const queryClient = useQueryClient()
 
@@ -1232,64 +913,45 @@ export default function Databases() {
     return pattern.name || pattern._id || 'Unknown pattern'
   }
 
-  // Fetch processors
+  // Fetch processors (hybrid ClickHouse kb_ids)
   const { data: processorsData, isLoading: processorsLoading } = useQuery({
-    queryKey: ['processors'],
-    queryFn: () => apiClient.getProcessors(),
-    enabled: selectedTab === 'mongodb',
+    queryKey: ['hybridProcessors'],
+    queryFn: () => apiClient.getHybridProcessors(),
+    enabled: selectedTab === 'patterns',
   })
 
-  // Fetch patterns for selected processor
+  // Fetch patterns for selected processor (hybrid ClickHouse + Redis)
   const { data: patternsData, isLoading: patternsLoading, refetch: refetchPatterns } = useQuery({
-    queryKey: ['patterns', selectedProcessor, page],
-    queryFn: () => apiClient.getPatterns(selectedProcessor!, page * pageSize, pageSize),
+    queryKey: ['hybridPatterns', selectedProcessor, page, sortBy, sortOrder],
+    queryFn: () => apiClient.getHybridPatterns(selectedProcessor!, page * pageSize, pageSize, sortBy, sortOrder),
     enabled: !!selectedProcessor,
     refetchInterval: 15000,
   })
 
-  // Fetch processor statistics
+  // Fetch processor statistics (hybrid ClickHouse)
   const { data: stats } = useQuery({
-    queryKey: ['processorStats', selectedProcessor],
-    queryFn: () => apiClient.getPatternStatistics(selectedProcessor!),
+    queryKey: ['hybridProcessorStats', selectedProcessor],
+    queryFn: () => apiClient.getHybridPatternStatistics(selectedProcessor!),
     enabled: !!selectedProcessor,
   })
 
-  // Fetch collections for selected processor
-  const { data: collectionsData, isLoading: collectionsLoading } = useQuery({
-    queryKey: ['collections', selectedProcessor],
-    queryFn: () => apiClient.listCollections(selectedProcessor!),
-    enabled: !!selectedProcessor && showCollections,
-  })
-
-  // Delete pattern mutation
+  // Delete pattern mutation (hybrid ClickHouse + Redis)
   const deleteMutation = useMutation({
-    mutationFn: ({ processorId, patternId }: { processorId: string; patternId: string }) =>
-      apiClient.deletePattern(processorId, patternId),
+    mutationFn: ({ kbId, patternName }: { kbId: string; patternName: string }) =>
+      apiClient.deleteHybridPattern(kbId, patternName),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['patterns'] })
-      queryClient.invalidateQueries({ queryKey: ['processorStats'] })
+      queryClient.invalidateQueries({ queryKey: ['hybridPatterns'] })
+      queryClient.invalidateQueries({ queryKey: ['hybridProcessorStats'] })
     },
   })
 
-  // Update pattern mutation
-  const updateMutation = useMutation({
-    mutationFn: ({ processorId, patternId, updates }: { processorId: string; patternId: string; updates: any }) =>
-      apiClient.updatePattern(processorId, patternId, updates),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['patterns'] })
-      queryClient.invalidateQueries({ queryKey: ['processorStats'] })
-      setEditingPattern(null)
-      setEditFormData({})
-    },
-  })
-
-  // Bulk delete patterns mutation
+  // Bulk delete patterns mutation (hybrid ClickHouse + Redis)
   const bulkDeleteMutation = useMutation({
-    mutationFn: ({ processorId, patternIds }: { processorId: string; patternIds: string[] }) =>
-      apiClient.bulkDeletePatterns(processorId, patternIds),
+    mutationFn: ({ kbId, patternNames }: { kbId: string; patternNames: string[] }) =>
+      apiClient.bulkDeleteHybridPatterns(kbId, patternNames),
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['patterns'] })
-      queryClient.invalidateQueries({ queryKey: ['processorStats'] })
+      queryClient.invalidateQueries({ queryKey: ['hybridPatterns'] })
+      queryClient.invalidateQueries({ queryKey: ['hybridProcessorStats'] })
       setSelectedPatterns(new Set())
       alert(`Successfully deleted ${data.deleted_count} pattern(s)`)
     },
@@ -1298,19 +960,27 @@ export default function Databases() {
     },
   })
 
-  // Delete collection mutation
-  const deleteCollectionMutation = useMutation({
-    mutationFn: ({ processorId, collectionName }: { processorId: string; collectionName: string }) =>
-      apiClient.deleteCollection(processorId, collectionName),
-  })
-
-  // Delete processor mutation
-  const deleteProcessorMutation = useMutation({
-    mutationFn: (processorId: string) => apiClient.deleteProcessor(processorId),
+  // Delete knowledgebase mutation (hybrid ClickHouse + Redis)
+  const deleteKnowledgebaseMutation = useMutation({
+    mutationFn: (kbId: string) => apiClient.deleteKnowledgebase(kbId),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['hybridProcessors'] })
+      queryClient.invalidateQueries({ queryKey: ['hybridPatterns'] })
+      queryClient.invalidateQueries({ queryKey: ['hybridProcessorStats'] })
+      setSelectedProcessor(null)
+      setSelectedPatterns(new Set())
+      alert(
+        `Successfully deleted knowledgebase:\n` +
+        `- ${data.clickhouse_deleted} patterns from ClickHouse\n` +
+        `- ${data.redis_keys_deleted} Redis keys`
+      )
+    },
+    onError: (error: any) => {
+      alert(`Failed to delete knowledgebase: ${error.response?.data?.detail || error.message}`)
+    },
   })
 
   const processors: ProcessorData[] = processorsData?.processors || []
-  const collections: string[] = collectionsData?.collections || []
   const patterns: Pattern[] = patternsData?.patterns || []
   const total = patternsData?.total || 0
   const totalPages = Math.ceil(total / pageSize)
@@ -1319,41 +989,19 @@ export default function Databases() {
     getPatternIdentifier(pattern).toLowerCase().includes(searchTerm.toLowerCase())
   )
 
-  const handleDelete = async (patternId: string) => {
+  const handleDelete = async (patternName: string) => {
     if (!selectedProcessor) return
     if (window.confirm('Are you sure you want to delete this pattern?')) {
-      await deleteMutation.mutateAsync({ processorId: selectedProcessor, patternId })
+      await deleteMutation.mutateAsync({ kbId: selectedProcessor, patternName })
     }
   }
 
-  const handleEdit = (pattern: Pattern) => {
-    setEditingPattern(pattern)
-    setEditFormData({
-      name: pattern.name,
-      frequency: pattern.frequency,
-    })
-  }
-
-  const handleUpdate = async () => {
-    if (!editingPattern || !selectedProcessor) return
-    await updateMutation.mutateAsync({
-      processorId: selectedProcessor,
-      patternId: editingPattern._id,
-      updates: editFormData,
-    })
-  }
-
-  const handleCancelEdit = () => {
-    setEditingPattern(null)
-    setEditFormData({})
-  }
-
-  const handleTogglePattern = (patternId: string) => {
+  const handleTogglePattern = (patternName: string) => {
     const newSelected = new Set(selectedPatterns)
-    if (newSelected.has(patternId)) {
-      newSelected.delete(patternId)
+    if (newSelected.has(patternName)) {
+      newSelected.delete(patternName)
     } else {
-      newSelected.add(patternId)
+      newSelected.add(patternName)
     }
     setSelectedPatterns(newSelected)
   }
@@ -1362,7 +1010,7 @@ export default function Databases() {
     if (selectedPatterns.size === filteredPatterns.length) {
       setSelectedPatterns(new Set())
     } else {
-      setSelectedPatterns(new Set(filteredPatterns.map(p => p._id)))
+      setSelectedPatterns(new Set(filteredPatterns.map(p => p.name)))
     }
   }
 
@@ -1371,142 +1019,49 @@ export default function Databases() {
 
     if (window.confirm(`Are you sure you want to delete ${selectedPatterns.size} pattern(s)? This action cannot be undone.`)) {
       await bulkDeleteMutation.mutateAsync({
-        processorId: selectedProcessor,
-        patternIds: Array.from(selectedPatterns)
+        kbId: selectedProcessor,
+        patternNames: Array.from(selectedPatterns)
       })
     }
   }
 
-  const handleDeleteCollection = async (collectionName: string) => {
-    if (!selectedProcessor) return
+  const handleDeleteKnowledgebase = async (kbId: string, event: React.MouseEvent) => {
+    event.stopPropagation()
 
-    const userInput = window.prompt(
-      `⚠️ WARNING: You are about to delete the entire "${collectionName}" collection.\n\n` +
-      `This will permanently remove ALL data in this collection and CANNOT be undone.\n\n` +
-      `Type "${collectionName}" exactly to confirm deletion:`
+    const processor = processors.find(p => (p.processor_id || p.kb_id) === kbId)
+    const patternCount = processor?.patterns_count || 0
+
+    // First confirmation
+    const firstConfirm = window.confirm(
+      `⚠️ WARNING: This will permanently delete the entire knowledgebase!\n\n` +
+      `Knowledgebase: ${kbId}\n` +
+      `Patterns to delete: ${patternCount.toLocaleString()}\n\n` +
+      `This will delete:\n` +
+      `- All patterns from ClickHouse\n` +
+      `- All associated Redis metadata\n\n` +
+      `Are you sure you want to continue?`
     )
 
-    if (userInput && userInput.trim() === collectionName) {
-      if (window.confirm(`Final confirmation: Delete collection "${collectionName}"?`)) {
-        try {
-          await deleteCollectionMutation.mutateAsync({
-            processorId: selectedProcessor,
-            collectionName
-          })
-          queryClient.invalidateQueries({ queryKey: ['patterns'] })
-          queryClient.invalidateQueries({ queryKey: ['processorStats'] })
-          queryClient.invalidateQueries({ queryKey: ['collections'] })
-          alert(`✓ Successfully deleted collection "${collectionName}"`)
-        } catch (error: any) {
-          alert(`✗ Failed to delete collection: ${error.response?.data?.detail || error.message}`)
-        }
-      }
-    } else if (userInput !== null) {
-      alert(`Collection name did not match. You typed: "${userInput}"\nExpected: "${collectionName}"`)
-    }
-  }
+    if (!firstConfirm) return
 
-  const handleToggleCollection = (collectionName: string) => {
-    const newSelected = new Set(selectedCollections)
-    if (newSelected.has(collectionName)) {
-      newSelected.delete(collectionName)
-    } else {
-      newSelected.add(collectionName)
-    }
-    setSelectedCollections(newSelected)
-  }
-
-  const handleToggleAllCollections = () => {
-    if (selectedCollections.size === collections.length) {
-      setSelectedCollections(new Set())
-    } else {
-      setSelectedCollections(new Set(collections))
-    }
-  }
-
-  const handleBulkDeleteCollections = async () => {
-    if (!selectedProcessor || selectedCollections.size === 0) return
-
-    const collectionList = Array.from(selectedCollections).join(', ')
-    const userInput = window.prompt(
-      `⚠️ DANGER: You are about to delete ${selectedCollections.size} collection(s):\n\n` +
-      `${collectionList}\n\n` +
-      `This will permanently remove ALL data and CANNOT be undone.\n\n` +
-      `Type "DELETE ${selectedCollections.size} COLLECTIONS" to confirm:`
+    // Second confirmation
+    const finalConfirm = window.confirm(
+      `⚠️ FINAL CONFIRMATION\n\n` +
+      `This will permanently delete knowledgebase "${kbId}" and cannot be undone.\n\n` +
+      `Click OK to delete, or Cancel to abort.`
     )
 
-    const expectedInput = `DELETE ${selectedCollections.size} COLLECTIONS`
-    if (userInput && userInput.trim() === expectedInput) {
-      const results = {
-        successful: [] as string[],
-        failed: [] as { name: string; error: string }[]
-      }
-
-      for (const collectionName of selectedCollections) {
-        try {
-          await deleteCollectionMutation.mutateAsync({
-            processorId: selectedProcessor,
-            collectionName
-          })
-          results.successful.push(collectionName)
-        } catch (error: any) {
-          results.failed.push({
-            name: collectionName,
-            error: error.response?.data?.detail || error.message || 'Unknown error'
-          })
-        }
-      }
-
-      // Refresh data
-      queryClient.invalidateQueries({ queryKey: ['patterns'] })
-      queryClient.invalidateQueries({ queryKey: ['processorStats'] })
-      queryClient.invalidateQueries({ queryKey: ['collections'] })
-      setSelectedCollections(new Set())
-
-      // Show results
-      let message = `✓ Successfully deleted ${results.successful.length} collection(s)`
-      if (results.failed.length > 0) {
-        message += `\n\n✗ Failed to delete ${results.failed.length} collection(s):\n`
-        results.failed.forEach(f => {
-          message += `\n• ${f.name}: ${f.error}`
-        })
-      }
-      alert(message)
-    } else if (userInput !== null) {
-      alert(`Confirmation text did not match.\nYou typed: "${userInput}"\nExpected: "${expectedInput}"`)
+    if (finalConfirm) {
+      await deleteKnowledgebaseMutation.mutateAsync(kbId)
     }
   }
 
-  const handleDeleteProcessor = async (processorId: string) => {
-    const userInput = window.prompt(
-      `⚠️ EXTREME DANGER: You are about to delete the ENTIRE processor database "${processorId}".\n\n` +
-      `This will permanently remove ALL collections, patterns, and data for this processor.\n\n` +
-      `This action CANNOT be undone!\n\n` +
-      `Type "${processorId}" exactly to confirm deletion:`
-    )
-
-    if (userInput && userInput.trim() === processorId) {
-      if (window.confirm(`FINAL WARNING: Delete entire database "${processorId}"?`)) {
-        try {
-          await deleteProcessorMutation.mutateAsync(processorId)
-          queryClient.invalidateQueries({ queryKey: ['processors'] })
-          setSelectedProcessor(null)
-          alert(`✓ Successfully deleted processor database "${processorId}"`)
-        } catch (error: any) {
-          alert(`✗ Failed to delete processor: ${error.response?.data?.detail || error.message}`)
-        }
-      }
-    } else if (userInput !== null) {
-      alert(`Processor ID did not match. You typed: "${userInput}"\nExpected: "${processorId}"`)
-    }
-  }
-
-  const handleToggleProcessor = (processorId: string) => {
+  const handleToggleProcessor = (processorKey: string) => {
     const newSelected = new Set(selectedProcessors)
-    if (newSelected.has(processorId)) {
-      newSelected.delete(processorId)
+    if (newSelected.has(processorKey)) {
+      newSelected.delete(processorKey)
     } else {
-      newSelected.add(processorId)
+      newSelected.add(processorKey)
     }
     setSelectedProcessors(newSelected)
   }
@@ -1515,58 +1070,74 @@ export default function Databases() {
     if (selectedProcessors.size === processors.length) {
       setSelectedProcessors(new Set())
     } else {
-      setSelectedProcessors(new Set(processors.map(p => p.processor_id)))
+      setSelectedProcessors(new Set(processors.map(p => p.processor_id || p.kb_id || 'unknown')))
     }
   }
 
-  const handleBulkDeleteProcessors = async () => {
+  const handleBulkDeleteKnowledgebases = async () => {
     if (selectedProcessors.size === 0) return
 
-    const processorList = Array.from(selectedProcessors).join(', ')
-    const userInput = window.prompt(
-      `⚠️ EXTREME DANGER: You are about to delete ${selectedProcessors.size} ENTIRE processor database(s):\n\n` +
-      `${processorList}\n\n` +
-      `This will permanently remove ALL collections, patterns, and data.\n\n` +
-      `This action CANNOT be undone!\n\n` +
-      `Type "DELETE ${selectedProcessors.size} DATABASES" to confirm:`
+    // Calculate total patterns across all selected KBs
+    const selectedKbList = Array.from(selectedProcessors)
+    const totalPatterns = selectedKbList.reduce((sum, kbId) => {
+      const processor = processors.find(p => (p.processor_id || p.kb_id) === kbId)
+      return sum + (processor?.patterns_count || 0)
+    }, 0)
+
+    // First confirmation
+    const firstConfirm = window.confirm(
+      `⚠️ DANGER: You are about to delete ${selectedProcessors.size} knowledgebase(s)!\n\n` +
+      `Knowledgebases:\n${selectedKbList.map(kb => `  • ${kb}`).join('\n')}\n\n` +
+      `Total patterns to delete: ${totalPatterns.toLocaleString()}\n\n` +
+      `This will permanently remove ALL data from ClickHouse and Redis.\n\n` +
+      `Are you sure you want to continue?`
     )
 
-    const expectedInput = `DELETE ${selectedProcessors.size} DATABASES`
-    if (userInput && userInput.trim() === expectedInput) {
-      const results = {
-        successful: [] as string[],
-        failed: [] as { name: string; error: string }[]
-      }
+    if (!firstConfirm) return
 
-      for (const processorId of selectedProcessors) {
-        try {
-          await deleteProcessorMutation.mutateAsync(processorId)
-          results.successful.push(processorId)
-        } catch (error: any) {
-          results.failed.push({
-            name: processorId,
-            error: error.response?.data?.detail || error.message || 'Unknown error'
-          })
-        }
-      }
+    // Second confirmation
+    const finalConfirm = window.confirm(
+      `⚠️ FINAL CONFIRMATION\n\n` +
+      `This will permanently delete ${selectedProcessors.size} knowledgebase(s) and ${totalPatterns.toLocaleString()} pattern(s).\n\n` +
+      `This action CANNOT be undone!\n\n` +
+      `Click OK to proceed with deletion, or Cancel to abort.`
+    )
 
-      // Refresh data
-      queryClient.invalidateQueries({ queryKey: ['processors'] })
-      setSelectedProcessor(null)
-      setSelectedProcessors(new Set())
+    if (!finalConfirm) return
 
-      // Show results
-      let message = `✓ Successfully deleted ${results.successful.length} processor database(s)`
-      if (results.failed.length > 0) {
-        message += `\n\n✗ Failed to delete ${results.failed.length} processor(s):\n`
-        results.failed.forEach(f => {
-          message += `\n• ${f.name}: ${f.error}`
+    // Perform bulk deletion
+    const results = {
+      successful: [] as string[],
+      failed: [] as { name: string; error: string }[]
+    }
+
+    for (const kbId of selectedKbList) {
+      try {
+        await deleteKnowledgebaseMutation.mutateAsync(kbId)
+        results.successful.push(kbId)
+      } catch (error: any) {
+        results.failed.push({
+          name: kbId,
+          error: error.response?.data?.detail || error.message || 'Unknown error'
         })
       }
-      alert(message)
-    } else if (userInput !== null) {
-      alert(`Confirmation text did not match.\nYou typed: "${userInput}"\nExpected: "${expectedInput}"`)
     }
+
+    // Clear selections
+    queryClient.invalidateQueries({ queryKey: ['hybridProcessors'] })
+    setSelectedProcessors(new Set())
+    setSelectedProcessor(null)
+    setSelectedPatterns(new Set())
+
+    // Show results
+    let message = `✓ Successfully deleted ${results.successful.length} knowledgebase(s)`
+    if (results.failed.length > 0) {
+      message += `\n\n✗ Failed to delete ${results.failed.length} knowledgebase(s):\n`
+      results.failed.forEach(f => {
+        message += `\n• ${f.name}: ${f.error}`
+      })
+    }
+    alert(message)
   }
 
   return (
@@ -1585,25 +1156,37 @@ export default function Databases() {
       <div className="flex gap-2 mb-6 border-b border-gray-200 dark:border-gray-700">
         <button
           onClick={() => {
-            setSelectedTab('mongodb')
+            setSelectedTab('patterns')
             setSelectedProcessor(null)
             setSelectedPatterns(new Set())
-            setSelectedCollections(new Set())
             setSelectedProcessors(new Set())
           }}
           className={`px-4 py-2 font-medium transition-colors border-b-2 ${
-            selectedTab === 'mongodb'
+            selectedTab === 'patterns'
               ? 'border-blue-600 text-blue-600 dark:text-blue-400'
               : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
           }`}
         >
-          MongoDB
+          Knowledgebase
+        </button>
+        <button
+          onClick={() => {
+            setSelectedTab('symbols')
+            setSelectedPatterns(new Set())
+            setSelectedProcessors(new Set())
+          }}
+          className={`px-4 py-2 font-medium transition-colors border-b-2 ${
+            selectedTab === 'symbols'
+              ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+              : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+          }`}
+        >
+          Symbols
         </button>
         <button
           onClick={() => {
             setSelectedTab('qdrant')
             setSelectedPatterns(new Set())
-            setSelectedCollections(new Set())
             setSelectedProcessors(new Set())
           }}
           className={`px-4 py-2 font-medium transition-colors border-b-2 ${
@@ -1618,7 +1201,6 @@ export default function Databases() {
           onClick={() => {
             setSelectedTab('redis')
             setSelectedPatterns(new Set())
-            setSelectedCollections(new Set())
             setSelectedProcessors(new Set())
           }}
           className={`px-4 py-2 font-medium transition-colors border-b-2 ${
@@ -1631,8 +1213,8 @@ export default function Databases() {
         </button>
       </div>
 
-      {/* MongoDB Tab */}
-      {selectedTab === 'mongodb' && (
+      {/* Knowledgebase Tab */}
+      {selectedTab === 'patterns' && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Processors List */}
           <div className="lg:col-span-1">
@@ -1675,8 +1257,8 @@ export default function Databases() {
                       </div>
                       {selectedProcessors.size > 0 && (
                         <button
-                          onClick={handleBulkDeleteProcessors}
-                          disabled={deleteProcessorMutation.isPending}
+                          onClick={handleBulkDeleteKnowledgebases}
+                          disabled={deleteKnowledgebaseMutation.isPending}
                           className="px-3 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700 transition-colors flex items-center gap-1 disabled:opacity-50"
                         >
                           <Trash className="w-3 h-3" />
@@ -1688,68 +1270,66 @@ export default function Databases() {
 
                   {/* Processors List */}
                   <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                    {processors.map((processor) => (
-                      <div
-                        key={processor.processor_id}
-                        className={`flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
-                          selectedProcessor === processor.processor_id
-                            ? 'bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-600'
-                            : ''
-                        }`}
-                      >
-                        {/* Checkbox */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleToggleProcessor(processor.processor_id)
-                          }}
-                          className="p-4 text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 flex-shrink-0"
+                    {processors.map((processor) => {
+                      const processorKey = processor.processor_id || processor.kb_id || 'unknown'
+                      return (
+                        <div
+                          key={processorKey}
+                          className={`group relative flex items-center hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
+                            selectedProcessor === processorKey
+                              ? 'bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-600'
+                              : ''
+                          }`}
                         >
-                          {selectedProcessors.has(processor.processor_id) ? (
-                            <CheckSquare className="w-5 h-5" />
-                          ) : (
-                            <Square className="w-5 h-5" />
-                          )}
-                        </button>
-
-                        {/* Processor Info */}
-                        <button
-                          onClick={() => {
-                            setSelectedProcessor(processor.processor_id)
-                            setPage(0)
-                            setSelectedPatterns(new Set())
-                            setSelectedCollections(new Set())
-                            setShowCollections(false)
-                          }}
-                          className="flex-1 p-4 pl-0 text-left flex items-center justify-between"
-                        >
-                          <div>
-                            <div className="font-medium text-gray-900 dark:text-white">
-                              {processor.name || processor.processor_id}
-                            </div>
-                            {processor.patterns_count !== undefined && (
-                              <div className="text-sm text-gray-500 dark:text-gray-400">
-                                {processor.patterns_count} patterns
-                              </div>
+                          {/* Checkbox */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleToggleProcessor(processorKey)
+                            }}
+                            className="p-4 text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 flex-shrink-0"
+                          >
+                            {selectedProcessors.has(processorKey) ? (
+                              <CheckSquare className="w-5 h-5" />
+                            ) : (
+                              <Square className="w-5 h-5" />
                             )}
-                          </div>
-                          <ChevronRight className="w-5 h-5 text-gray-400" />
-                        </button>
+                          </button>
 
-                        {/* Delete Button */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleDeleteProcessor(processor.processor_id)
-                          }}
-                          disabled={deleteProcessorMutation.isPending}
-                          className="p-4 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 disabled:opacity-50 flex-shrink-0"
-                          title="Delete Processor Database"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
+                          {/* Processor Info */}
+                          <button
+                            onClick={() => {
+                              setSelectedProcessor(processorKey)
+                              setPage(0)
+                              setSelectedPatterns(new Set())
+                            }}
+                            className="flex-1 p-4 pl-0 text-left flex items-center justify-between"
+                          >
+                            <div>
+                              <div className="font-medium text-gray-900 dark:text-white">
+                                {processor.name || processorKey}
+                              </div>
+                              {processor.patterns_count !== undefined && (
+                                <div className="text-sm text-gray-500 dark:text-gray-400">
+                                  {processor.patterns_count.toLocaleString()} patterns
+                                </div>
+                              )}
+                            </div>
+                            <ChevronRight className="w-5 h-5 text-gray-400" />
+                          </button>
+
+                          {/* Delete Button */}
+                          <button
+                            onClick={(e) => handleDeleteKnowledgebase(processorKey, e)}
+                            disabled={deleteKnowledgebaseMutation.isPending}
+                            className="p-4 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50 flex-shrink-0"
+                            title="Delete knowledgebase"
+                          >
+                            <Trash2 className="w-5 h-5" />
+                          </button>
+                        </div>
+                      )
+                    })}
                   </div>
                 </>
               )}
@@ -1767,150 +1347,6 @@ export default function Databases() {
               </div>
             ) : (
               <div className="space-y-6">
-                {/* Collections Management */}
-                <div className="bg-white dark:bg-gray-800 rounded-lg shadow">
-                  <button
-                    onClick={() => setShowCollections(!showCollections)}
-                    className="w-full p-4 flex items-center justify-between text-left hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Database className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                        Collections Management
-                      </h3>
-                      {collections.length > 0 && (
-                        <span className="text-sm text-gray-500 dark:text-gray-400">
-                          ({collections.length} collections)
-                        </span>
-                      )}
-                    </div>
-                    <ChevronRight className={`w-5 h-5 text-gray-400 transition-transform ${showCollections ? 'rotate-90' : ''}`} />
-                  </button>
-
-                  {showCollections && (
-                    <div className="border-t border-gray-200 dark:border-gray-700 p-4">
-                      {collectionsLoading ? (
-                        <div className="text-center py-4 text-gray-500 dark:text-gray-400">
-                          Loading collections...
-                        </div>
-                      ) : collections.length === 0 ? (
-                        <div className="text-center py-4 text-gray-500 dark:text-gray-400">
-                          No collections found
-                        </div>
-                      ) : (
-                        <>
-                          {/* Bulk Actions */}
-                          <div className="mb-4 pb-4 border-b border-gray-200 dark:border-gray-700 space-y-3">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-3">
-                                <button
-                                  onClick={handleToggleAllCollections}
-                                  className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400"
-                                >
-                                  {selectedCollections.size === collections.length && collections.length > 0 ? (
-                                    <CheckSquare className="w-5 h-5" />
-                                  ) : (
-                                    <Square className="w-5 h-5" />
-                                  )}
-                                </button>
-                                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                  {selectedCollections.size === collections.length && collections.length > 0
-                                    ? 'Deselect All'
-                                    : 'Select All'}
-                                </span>
-                              </div>
-                              {selectedCollections.size > 0 && (
-                                <button
-                                  onClick={handleBulkDeleteCollections}
-                                  disabled={deleteCollectionMutation.isPending}
-                                  className="px-3 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2 disabled:opacity-50 text-sm"
-                                >
-                                  <Trash className="w-3 h-3" />
-                                  Delete ({selectedCollections.size})
-                                </button>
-                              )}
-                            </div>
-                            {/* View Selected Collections Button */}
-                            {selectedCollections.size > 0 && (
-                              <button
-                                onClick={() => {
-                                  setCollectionsToView(new Set(selectedCollections))
-                                }}
-                                className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 text-sm font-medium"
-                              >
-                                <Database className="w-4 h-4" />
-                                View Selected Collections ({selectedCollections.size})
-                              </button>
-                            )}
-                          </div>
-
-                          {/* Collections List */}
-                          <div className="space-y-2">
-                            {collections.map((collectionName) => (
-                              <div
-                                key={collectionName}
-                                className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50"
-                              >
-                                <button
-                                  onClick={() => handleToggleCollection(collectionName)}
-                                  className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400"
-                                >
-                                  {selectedCollections.has(collectionName) ? (
-                                    <CheckSquare className="w-5 h-5" />
-                                  ) : (
-                                    <Square className="w-5 h-5" />
-                                  )}
-                                </button>
-                                <code className="flex-1 text-sm font-mono text-gray-900 dark:text-white">
-                                  {collectionName}
-                                </code>
-                                <button
-                                  onClick={() => handleDeleteCollection(collectionName)}
-                                  disabled={deleteCollectionMutation.isPending}
-                                  className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 disabled:opacity-50"
-                                  title="Delete Collection"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Multi-Collection Viewer */}
-                {collectionsToView.size > 0 && (
-                  <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                        Viewing {collectionsToView.size} Collection{collectionsToView.size !== 1 ? 's' : ''}
-                      </h3>
-                      <button
-                        onClick={() => setCollectionsToView(new Set())}
-                        className="px-3 py-1 text-sm bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
-                      >
-                        Clear View
-                      </button>
-                    </div>
-                    <div className={`grid gap-4 ${
-                      collectionsToView.size === 1
-                        ? 'grid-cols-1'
-                        : 'grid-cols-1 lg:grid-cols-2'
-                    }`}>
-                      {Array.from(collectionsToView).map((collectionName) => (
-                        <CollectionViewer
-                          key={collectionName}
-                          processorId={selectedProcessor!}
-                          collectionName={collectionName}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-
                 {/* Stats */}
                 {stats && (
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1935,35 +1371,74 @@ export default function Databases() {
                   </div>
                 )}
 
-                {/* Search and Actions */}
-                <div className="flex gap-4 flex-wrap">
-                  <div className="flex-1 relative min-w-[200px]">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                    <input
-                      type="text"
-                      placeholder="Search patterns..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
+                {/* Hybrid Architecture Badge */}
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 flex items-center gap-3">
+                  <div className="flex items-center gap-2 text-blue-700 dark:text-blue-300">
+                    <Database className="w-5 h-5" />
+                    <span className="font-semibold">Hybrid Architecture:</span>
                   </div>
-                  {selectedPatterns.size > 0 && (
-                    <button
-                      onClick={handleBulkDelete}
-                      disabled={bulkDeleteMutation.isPending}
-                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2 disabled:opacity-50"
+                  <div className="text-sm text-blue-600 dark:text-blue-400">
+                    <span className="font-mono">ClickHouse</span> (pattern data) + <span className="font-mono">Redis</span> (metadata)
+                  </div>
+                </div>
+
+                {/* Search, Sort, and Actions */}
+                <div className="space-y-4">
+                  <div className="flex gap-4 flex-wrap">
+                    <div className="flex-1 relative min-w-[200px]">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                      <input
+                        type="text"
+                        placeholder="Search patterns..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+
+                    {/* Sort Controls */}
+                    <select
+                      value={sortBy}
+                      onChange={(e) => {
+                        setSortBy(e.target.value as 'length' | 'token_count' | 'frequency')
+                        setPage(0)
+                      }}
+                      className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     >
-                      <Trash className="w-4 h-4" />
-                      Delete Selected ({selectedPatterns.size})
+                      <option value="length">Sort by Length</option>
+                      <option value="token_count">Sort by Token Count</option>
+                      <option value="frequency">Sort by Frequency</option>
+                    </select>
+
+                    <button
+                      onClick={() => {
+                        setSortOrder(sortOrder === -1 ? 1 : -1)
+                        setPage(0)
+                      }}
+                      className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                      title={sortOrder === -1 ? 'Descending' : 'Ascending'}
+                    >
+                      {sortOrder === -1 ? '↓ Desc' : '↑ Asc'}
                     </button>
-                  )}
-                  <button
-                    onClick={() => refetchPatterns()}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
-                  >
-                    <RefreshCw className="w-4 h-4" />
-                    Refresh
-                  </button>
+
+                    {selectedPatterns.size > 0 && (
+                      <button
+                        onClick={handleBulkDelete}
+                        disabled={bulkDeleteMutation.isPending}
+                        className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2 disabled:opacity-50"
+                      >
+                        <Trash className="w-4 h-4" />
+                        Delete Selected ({selectedPatterns.size})
+                      </button>
+                    )}
+                    <button
+                      onClick={() => refetchPatterns()}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                      Refresh
+                    </button>
+                  </div>
                 </div>
 
                 {/* Patterns List */}
@@ -2003,94 +1478,55 @@ export default function Databases() {
                       {/* Pattern Rows */}
                       <div className="max-h-[600px] overflow-y-auto divide-y divide-gray-200 dark:divide-gray-700">
                         {filteredPatterns.map((pattern) => (
-                        <div key={pattern._id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                          {editingPattern?._id === pattern._id ? (
-                            /* Edit Mode */
-                            <div className="p-4">
-                              <div className="space-y-3">
-                                <div>
-                                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                    Pattern Name (Read-only)
-                                  </label>
-                                  <input
-                                    type="text"
-                                    value={editFormData.name || ''}
-                                    disabled
-                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-white font-mono text-sm"
-                                  />
+                        <div key={pattern.name || pattern._id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                          {/* View Mode - Clickable Row */}
+                          <div className="flex items-center gap-3 p-4">
+                            {/* Checkbox */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleTogglePattern(pattern.name)
+                              }}
+                              className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 flex-shrink-0"
+                            >
+                              {selectedPatterns.has(pattern.name) ? (
+                                <CheckSquare className="w-5 h-5" />
+                              ) : (
+                                <Square className="w-5 h-5" />
+                              )}
+                            </button>
+
+                            {/* Clickable Pattern Content */}
+                            <button
+                              onClick={() => setSelectedPatternForDetails(pattern)}
+                              className="flex-1 text-left flex items-center justify-between group"
+                            >
+                              <div className="flex-1 min-w-0">
+                                <div className="font-mono text-sm text-gray-900 dark:text-white mb-1 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                                  {getPatternIdentifier(pattern)}
                                 </div>
-                                <div>
-                                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                    Frequency
-                                  </label>
-                                  <input
-                                    type="number"
-                                    value={editFormData.frequency || 0}
-                                    onChange={(e) => setEditFormData({ ...editFormData, frequency: parseInt(e.target.value) })}
-                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                                  />
-                                </div>
-                                <div className="flex gap-2">
-                                  <button
-                                    onClick={handleUpdate}
-                                    disabled={updateMutation.isPending}
-                                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                                  >
-                                    Save
-                                  </button>
-                                  <button
-                                    onClick={handleCancelEdit}
-                                    className="px-4 py-2 bg-gray-300 dark:bg-gray-600 text-gray-900 dark:text-white rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500"
-                                  >
-                                    Cancel
-                                  </button>
+                                <div className="flex gap-4 text-sm text-gray-600 dark:text-gray-400">
+                                  <span className="flex items-center gap-1">
+                                    <span className="font-medium">Frequency:</span>
+                                    <span className="text-blue-600 dark:text-blue-400 font-semibold">{pattern.frequency}</span>
+                                  </span>
+                                  {pattern.length !== undefined && (
+                                    <span className="flex items-center gap-1">
+                                      <span className="font-medium">Length:</span>
+                                      <span className="text-purple-600 dark:text-purple-400 font-semibold">{pattern.length}</span>
+                                    </span>
+                                  )}
+                                  {pattern.token_count !== undefined && (
+                                    <span className="flex items-center gap-1">
+                                      <span className="font-medium">Tokens:</span>
+                                      <span className="text-green-600 dark:text-green-400 font-semibold">{pattern.token_count}</span>
+                                    </span>
+                                  )}
                                 </div>
                               </div>
-                            </div>
-                          ) : (
-                            /* View Mode - Clickable Row */
-                            <div className="flex items-center gap-3 p-4">
-                              {/* Checkbox */}
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleTogglePattern(pattern._id)
-                                }}
-                                className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 flex-shrink-0"
-                              >
-                                {selectedPatterns.has(pattern._id) ? (
-                                  <CheckSquare className="w-5 h-5" />
-                                ) : (
-                                  <Square className="w-5 h-5" />
-                                )}
-                              </button>
-
-                              {/* Clickable Pattern Content */}
-                              <button
-                                onClick={() => setSelectedPatternForDetails(pattern)}
-                                className="flex-1 text-left flex items-center justify-between group"
-                              >
-                                <div className="flex-1 min-w-0">
-                                  <div className="font-mono text-sm text-gray-900 dark:text-white mb-1 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                                    {getPatternIdentifier(pattern)}
-                                  </div>
-                                  <div className="flex gap-4 text-sm text-gray-600 dark:text-gray-400">
-                                    <span className="flex items-center gap-1">
-                                      <span className="font-medium">Frequency:</span>
-                                      <span className="text-blue-600 dark:text-blue-400 font-semibold">{pattern.frequency}</span>
-                                    </span>
-                                    {pattern.length !== undefined && (
-                                      <span className="flex items-center gap-1">
-                                        <span className="font-medium">Length:</span>
-                                        <span className="text-purple-600 dark:text-purple-400 font-semibold">{pattern.length}</span>
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                                <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors flex-shrink-0 ml-2" />
-                              </button>
-                            </div>
-                          )}
+                              <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors flex-shrink-0 ml-2" />
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -2132,16 +1568,15 @@ export default function Databases() {
           pattern={selectedPatternForDetails}
           processorId={selectedProcessor}
           onClose={() => setSelectedPatternForDetails(null)}
-          onEdit={(pattern) => {
-            handleEdit(pattern)
-            setSelectedPatternForDetails(null)
-          }}
-          onDelete={(patternId) => {
-            handleDelete(patternId)
+          onDelete={(patternName) => {
+            handleDelete(patternName)
             setSelectedPatternForDetails(null)
           }}
         />
       )}
+
+      {/* Symbols Tab */}
+      {selectedTab === 'symbols' && <SymbolsBrowser />}
 
       {/* Qdrant Tab */}
       {selectedTab === 'qdrant' && <QdrantBrowser />}

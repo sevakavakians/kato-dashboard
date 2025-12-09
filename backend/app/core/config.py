@@ -20,10 +20,19 @@ class Settings(BaseSettings):
     kato_api_url: str = Field(default="http://kato:8000", env="KATO_API_URL")
 
     # Database Connections (Read-Only)
-    mongo_url: str = Field(default="mongodb://mongodb:27017", env="MONGO_URL")
-    mongo_read_only: bool = Field(default=True, env="MONGO_READ_ONLY")
+    database_read_only: bool = Field(default=True, env="DATABASE_READ_ONLY")
     qdrant_url: str = Field(default="http://qdrant:6333", env="QDRANT_URL")
     redis_url: str = Field(default="redis://redis:6379", env="REDIS_URL")
+
+    # ClickHouse Configuration (Hybrid Architecture)
+    clickhouse_host: str = Field(default="clickhouse", env="CLICKHOUSE_HOST")
+    clickhouse_http_port: int = Field(default=8123, env="CLICKHOUSE_HTTP_PORT")
+    clickhouse_db: str = Field(default="kato", env="CLICKHOUSE_DB")
+    clickhouse_user: str = Field(default="default", env="CLICKHOUSE_USER")
+    clickhouse_password: str = Field(default="", env="CLICKHOUSE_PASSWORD")
+
+    # Hybrid Architecture Mode (ClickHouse + Redis for patterns)
+    use_hybrid_patterns: bool = Field(default=True, env="USE_HYBRID_PATTERNS")
 
     # Security
     admin_username: str = Field(default="admin", env="ADMIN_USERNAME")
@@ -33,7 +42,7 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = Field(default=30, env="ACCESS_TOKEN_EXPIRE_MINUTES")
 
     # CORS
-    cors_origins: str = Field(default="http://localhost:3000,http://localhost:8080", env="CORS_ORIGINS")
+    cors_origins: str = Field(default="http://localhost:3001,http://localhost:8080", env="CORS_ORIGINS")
 
     @property
     def cors_origins_list(self) -> List[str]:

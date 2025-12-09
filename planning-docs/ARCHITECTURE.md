@@ -1,12 +1,17 @@
 # Architecture Documentation
 
-**Last Updated**: 2025-10-10
-**Status**: MVP Complete + Bug Fixes
+**Last Updated**: 2025-12-03
+**Status**: MongoDB Removed + KB Deletion Added
 **Confidence Level**: High (all components tested and verified)
 
 ## System Overview
 
 KATO Dashboard is an isolated monitoring and management interface that runs alongside the main KATO AI system. It provides real-time visibility into system performance, database state, and session management without impacting KATO's core operations.
+
+**Architecture Evolution (2025-12-03)**:
+- **MongoDB Removed**: Complete removal of MongoDB from the stack
+- **Simplified Architecture**: ClickHouse + Redis + Qdrant (single source of truth for patterns)
+- **KB Deletion Added**: New capability to delete knowledgebases from all storage layers
 
 ## High-Level Architecture
 
@@ -34,10 +39,12 @@ KATO Dashboard is an isolated monitoring and management interface that runs alon
        ┌───────────────────┼───────────────────┐
        │                   │                   │
    ┌───▼────────┐   ┌─────▼──────┐   ┌───────▼────────┐
-   │  KATO API  │   │  MongoDB   │   │  Qdrant        │
-   │  :8000     │   │  :27017    │   │  :6333         │
+   │  KATO API  │   │ ClickHouse │   │  Qdrant        │
+   │  :8000     │   │  :9000     │   │  :6333         │
    │            │   │            │   │  Redis :6379   │
    └────────────┘   └────────────┘   └────────────────┘
+
+   Note: MongoDB removed 2025-12-03 (architecture simplification)
 ```
 
 ## Component Architecture
@@ -51,13 +58,19 @@ backend/app/
 ├── core/
 │   └── config.py              # Pydantic settings, environment config
 ├── api/
-│   └── routes.py              # All API endpoints (~500 lines)
+│   └── routes.py              # All API endpoints (~400 lines after MongoDB removal)
 ├── db/
-│   ├── mongodb.py             # Async MongoDB client with read-only mode
+│   ├── clickhouse.py          # ClickHouse client for pattern storage
 │   ├── qdrant.py              # Qdrant vector database client
-│   └── redis_client.py        # Async Redis client with connection pooling
+│   ├── redis_client.py        # Async Redis client with connection pooling
+│   ├── symbol_stats.py        # Redis-backed symbol statistics
+│   └── hybrid_patterns.py     # Hybrid ClickHouse + Redis operations (KB deletion)
 └── services/
-    └── kato_api.py            # KATO API proxy with caching layer
+    ├── kato_api.py            # KATO API proxy with caching layer
+    ├── analytics.py           # Analytics service
+    └── websocket.py           # WebSocket connection manager
+
+Note: mongodb.py removed 2025-12-03 (MongoDB completely removed from stack)
 ```
 
 #### Key Design Patterns
@@ -73,9 +86,10 @@ backend/app/
 - Easy testing and mocking
 
 **3. Read-Only by Default**
-- MongoDB connections use read-only mode
+- All database connections use read-only mode by default
 - Prevents accidental data modification
-- Configurable via MONGODB_READ_ONLY env var
+- Configurable via DATABASE_READ_ONLY env var (renamed from MONGO_READ_ONLY on 2025-12-03)
+- Applies to ClickHouse, Redis, and Qdrant operations
 
 **4. Caching Layer**
 - KATO API responses cached for 30 seconds
@@ -83,11 +97,11 @@ backend/app/
 - In-memory cache with TTL expiration
 
 **5. Connection Pooling**
-- Motor (MongoDB): MaxPoolSize=50
+- ClickHouse: HTTP connection pooling via clickhouse-connect
 - Redis: ConnectionPool with max_connections=20
 - Qdrant: Persistent client connections
 
-#### API Endpoints (30+)
+#### API Endpoints (41 HTTP + 1 WebSocket)
 
 **System & Health**
 - `GET /health` - Service health check
@@ -101,12 +115,16 @@ backend/app/
 - `GET /sessions/{id}` - Session details
 - `GET /sessions/{id}/stm` - Short-term memory
 
-**MongoDB**
-- `GET /databases/mongodb/processors` - List all processors
-- `GET /databases/mongodb/{processor_id}/patterns` - List patterns
-- `POST /databases/mongodb/{processor_id}/patterns` - Create pattern
-- `PUT /databases/mongodb/{processor_id}/patterns/{pattern_id}` - Update
-- `DELETE /databases/mongodb/{processor_id}/patterns/{pattern_id}` - Delete
+**Patterns (ClickHouse + Redis Hybrid)**
+- `GET /databases/patterns/processors` - List all processors with pattern data
+- `GET /databases/patterns/{kb_id}` - Get paginated patterns from ClickHouse
+- `GET /databases/patterns/{kb_id}/statistics` - Get pattern statistics
+- `DELETE /databases/patterns/{kb_id}` - Delete knowledgebase (ClickHouse + Redis)
+
+**Symbols (Redis)**
+- `GET /databases/symbols/processors` - List processors with symbol data
+- `GET /databases/symbols/{kb_id}` - Get paginated symbols with sorting/search
+- `GET /databases/symbols/{kb_id}/statistics` - Get aggregate symbol statistics
 
 **Qdrant**
 - `GET /databases/qdrant/collections` - List collections
@@ -121,6 +139,11 @@ backend/app/
 
 **Analytics**
 - `GET /analytics/overview` - Aggregated analytics
+
+**WebSocket**
+- `WS /ws` - Real-time updates (metrics, container stats, session events)
+
+**Note**: All MongoDB endpoints removed 2025-12-03 (12 endpoints deleted)
 
 ### Frontend (React)
 
@@ -197,6 +220,14 @@ Auto-update Component
 
 ## Data Models
 
+### Architecture Note (2025-12-03)
+
+**Data Storage Strategy**:
+- **ClickHouse**: Primary storage for all patterns (columnar database for analytics)
+- **Redis**: Metadata caching and symbol statistics (fast key-value access)
+- **Qdrant**: Vector embeddings (semantic search and similarity)
+- **MongoDB**: Removed 2025-12-03 (redundant with ClickHouse)
+
 ### Key Entities
 
 **System Metrics**
@@ -238,44 +269,17 @@ Auto-update Component
 
 ## Database Design
 
-### MongoDB Collections
-- `processors` - Pattern processor metadata
-- `patterns` - Learned behavioral patterns (see schema below)
-- `sessions` - Session metadata
-- Read-only access by default
+### ClickHouse Tables
+- `patterns_kb` - All learned behavioral patterns
+  - Columnar storage for high-performance analytics
+  - Primary storage for pattern data (replaced MongoDB)
+  - Schema: kb_id, pattern_name, pattern_data, length, emotives, metadata, frequency
+- Read-only access by default (configurable via DATABASE_READ_ONLY)
 
-#### KATO Superknowledgebase Pattern Schema (Verified)
-**Status**: Verified with production data (2025-10-10)
-**Confidence**: HIGH
-
-```typescript
-interface Pattern {
-  _id: ObjectId              // MongoDB unique identifier
-  name: string               // Hash identifier (e.g., "1a2b3c4d5e6f...")
-  pattern_data: any          // Actual pattern content (any type: string, array, object)
-  length: number             // Pattern length/size
-  emotives?: any             // Emotional components (optional)
-  metadata?: any             // Additional metadata (optional)
-  frequency?: number         // Usage frequency (added by aggregation)
-}
-```
-
-**Core Fields** (always present):
-- `_id`: MongoDB ObjectId (serialized to string in API responses)
-- `name`: Hash-based identifier for the pattern
-- `pattern_data`: The actual pattern (supports any data type)
-- `length`: Numeric length/size of pattern
-
-**Optional Fields**:
-- `emotives`: Emotional components associated with pattern
-- `metadata`: Additional metadata (structure varies)
-- `frequency`: Added by aggregation queries, not stored in document
-
-**Important Notes**:
-- Pattern data can be any type (text, arrays, objects, nested structures)
-- Frontend must handle `pattern_data` generically using JSON.stringify()
-- Do not assume text-only patterns
-- ObjectId fields must be serialized to strings for JSON responses (use `serialize_mongo_doc()` helper)
+**Pattern Storage Evolution**:
+- **Before 2025-12-03**: MongoDB (document storage)
+- **After 2025-12-03**: ClickHouse (columnar analytics database)
+- **Reason**: Single source of truth, better performance, simpler architecture
 
 ### Qdrant Collections
 - `long_term_memory` - Vectorized memories

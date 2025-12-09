@@ -125,7 +125,7 @@ health:
 	@curl -s http://localhost:8080/health | python3 -m json.tool || echo "Backend not responding"
 	@echo ""
 	@echo "Frontend Health:"
-	@curl -s http://localhost:3000/health || echo "Frontend not responding"
+	@curl -s http://localhost:3001/health || echo "Frontend not responding"
 
 # API documentation
 docs:
@@ -135,4 +135,4 @@ docs:
 # Open dashboard in browser
 open:
 	@echo "Opening dashboard..."
-	@open http://localhost:3000 || xdg-open http://localhost:3000 || echo "Dashboard: http://localhost:3000"
+	@open http://localhost:3001 || xdg-open http://localhost:3001 || echo "Dashboard: http://localhost:3001"

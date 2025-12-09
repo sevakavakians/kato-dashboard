@@ -9,24 +9,6 @@ from app.services.kato_api import get_kato_client
 from app.services import analytics
 from app.services.session_manager import get_session_manager
 from app.services.docker_stats import get_docker_stats_client
-from app.db.mongodb import (
-    get_processor_databases,
-    get_patterns,
-    get_pattern_by_id,
-    get_pattern_statistics,
-    update_pattern,
-    delete_pattern,
-    bulk_delete_patterns,
-    list_collections_in_db,
-    delete_collection,
-    delete_database,
-    get_collection_documents,
-    get_collection_document_by_id,
-    update_collection_document,
-    delete_collection_document,
-    bulk_delete_collection_documents,
-    get_collection_statistics
-)
 from app.db.qdrant import (
     list_collections,
     get_collection_stats,
@@ -114,7 +96,7 @@ async def get_container_statistics(use_cache: bool = True):
     Get Docker container statistics for all KATO services
 
     Returns real-time CPU, memory, network, and disk I/O metrics
-    for KATO, MongoDB, Qdrant, and Redis containers.
+    for KATO, ClickHouse, Qdrant, and Redis containers.
     """
     try:
         docker_client = get_docker_stats_client()
@@ -332,354 +314,6 @@ async def cleanup_expired_redis_session_keys():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ============================================================================
-# MongoDB Database Endpoints
-# ============================================================================
-
-@router.get("/databases/mongodb/processors")
-async def list_processor_databases():
-    """List all processor databases"""
-    try:
-        databases = await get_processor_databases()
-        return {
-            "processors": databases,
-            "total": len(databases)
-        }
-    except Exception as e:
-        logger.error(f"Failed to list processor databases: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.delete("/databases/mongodb/processors/{processor_id}")
-async def delete_processor_database(processor_id: str):
-    """Delete an entire processor database"""
-    try:
-        success = await delete_database(processor_id)
-
-        if not success:
-            raise HTTPException(
-                status_code=403,
-                detail="Delete database failed - database may be in read-only mode or does not exist"
-            )
-
-        return {
-            "success": True,
-            "processor_id": processor_id,
-            "message": f"Database {processor_id} deleted successfully"
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to delete database: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/databases/mongodb/{processor_id}/patterns")
-async def list_patterns(
-    processor_id: str,
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000),
-    sort_by: str = Query("frequency", regex="^(frequency|_id|pattern)$"),
-    sort_order: int = Query(-1, ge=-1, le=1)
-):
-    """Get patterns for a processor"""
-    try:
-        result = await get_patterns(
-            processor_id=processor_id,
-            skip=skip,
-            limit=limit,
-            sort_by=sort_by,
-            sort_order=sort_order
-        )
-        return result
-    except Exception as e:
-        logger.error(f"Failed to get patterns: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/databases/mongodb/{processor_id}/patterns/{pattern_id}")
-async def get_pattern_details(processor_id: str, pattern_id: str):
-    """Get specific pattern details"""
-    try:
-        pattern = await get_pattern_by_id(processor_id, pattern_id)
-
-        if not pattern:
-            raise HTTPException(status_code=404, detail="Pattern not found")
-
-        return pattern
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to get pattern: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.put("/databases/mongodb/{processor_id}/patterns/{pattern_id}")
-async def update_pattern_endpoint(
-    processor_id: str,
-    pattern_id: str,
-    updates: Dict[str, Any]
-):
-    """Update a pattern"""
-    try:
-        success = await update_pattern(processor_id, pattern_id, updates)
-
-        if not success:
-            raise HTTPException(
-                status_code=403,
-                detail="Update failed - database may be in read-only mode"
-            )
-
-        return {"success": True, "pattern_id": pattern_id}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to update pattern: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.delete("/databases/mongodb/{processor_id}/patterns/{pattern_id}")
-async def delete_pattern_endpoint(processor_id: str, pattern_id: str):
-    """Delete a pattern"""
-    try:
-        success = await delete_pattern(processor_id, pattern_id)
-
-        if not success:
-            raise HTTPException(
-                status_code=403,
-                detail="Delete failed - database may be in read-only mode"
-            )
-
-        return {"success": True, "pattern_id": pattern_id}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to delete pattern: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/databases/mongodb/{processor_id}/patterns/bulk-delete")
-async def bulk_delete_patterns_endpoint(
-    processor_id: str,
-    request: Dict[str, Any]
-):
-    """Bulk delete multiple patterns"""
-    try:
-        pattern_ids = request.get('pattern_ids', [])
-
-        if not pattern_ids:
-            raise HTTPException(status_code=400, detail="No pattern IDs provided")
-
-        deleted_count = await bulk_delete_patterns(processor_id, pattern_ids)
-
-        if deleted_count == 0:
-            raise HTTPException(
-                status_code=403,
-                detail="Bulk delete failed - database may be in read-only mode"
-            )
-
-        return {
-            "success": True,
-            "deleted_count": deleted_count,
-            "requested_count": len(pattern_ids)
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to bulk delete patterns: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/databases/mongodb/{processor_id}/collections")
-async def list_collections_endpoint(processor_id: str):
-    """List all collections in a processor database"""
-    try:
-        collections = await list_collections_in_db(processor_id)
-        return {
-            "collections": collections,
-            "total": len(collections),
-            "processor_id": processor_id
-        }
-    except Exception as e:
-        logger.error(f"Failed to list collections: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.delete("/databases/mongodb/{processor_id}/collections/{collection_name}")
-async def delete_collection_endpoint(processor_id: str, collection_name: str):
-    """Delete an entire collection"""
-    try:
-        success = await delete_collection(processor_id, collection_name)
-
-        if not success:
-            raise HTTPException(
-                status_code=403,
-                detail="Delete collection failed - database may be in read-only mode or collection does not exist"
-            )
-
-        return {
-            "success": True,
-            "processor_id": processor_id,
-            "collection_name": collection_name
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to delete collection: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/databases/mongodb/{processor_id}/statistics")
-async def get_processor_statistics(processor_id: str):
-    """Get aggregated statistics for a processor"""
-    try:
-        stats = await get_pattern_statistics(processor_id)
-        return stats
-    except Exception as e:
-        logger.error(f"Failed to get statistics: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/databases/mongodb/{processor_id}/collections/{collection_name}/documents")
-async def list_collection_documents(
-    processor_id: str,
-    collection_name: str,
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000),
-    sort_by: str = Query("_id"),
-    sort_order: int = Query(-1, ge=-1, le=1)
-):
-    """Get documents from any collection"""
-    try:
-        result = await get_collection_documents(
-            processor_id=processor_id,
-            collection_name=collection_name,
-            skip=skip,
-            limit=limit,
-            sort_by=sort_by,
-            sort_order=sort_order
-        )
-        return result
-    except Exception as e:
-        logger.error(f"Failed to get collection documents: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/databases/mongodb/{processor_id}/collections/{collection_name}/documents/{document_id}")
-async def get_collection_document_details(
-    processor_id: str,
-    collection_name: str,
-    document_id: str
-):
-    """Get specific document details from any collection"""
-    try:
-        document = await get_collection_document_by_id(processor_id, collection_name, document_id)
-
-        if not document:
-            raise HTTPException(status_code=404, detail="Document not found")
-
-        return document
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to get document: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.put("/databases/mongodb/{processor_id}/collections/{collection_name}/documents/{document_id}")
-async def update_collection_document_endpoint(
-    processor_id: str,
-    collection_name: str,
-    document_id: str,
-    updates: Dict[str, Any]
-):
-    """Update a document in any collection"""
-    try:
-        success = await update_collection_document(processor_id, collection_name, document_id, updates)
-
-        if not success:
-            raise HTTPException(
-                status_code=403,
-                detail="Update failed - database may be in read-only mode"
-            )
-
-        return {"success": True, "document_id": document_id}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to update document: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.delete("/databases/mongodb/{processor_id}/collections/{collection_name}/documents/{document_id}")
-async def delete_collection_document_endpoint(
-    processor_id: str,
-    collection_name: str,
-    document_id: str
-):
-    """Delete a document from any collection"""
-    try:
-        success = await delete_collection_document(processor_id, collection_name, document_id)
-
-        if not success:
-            raise HTTPException(
-                status_code=403,
-                detail="Delete failed - database may be in read-only mode"
-            )
-
-        return {"success": True, "document_id": document_id}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to delete document: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/databases/mongodb/{processor_id}/collections/{collection_name}/documents/bulk-delete")
-async def bulk_delete_collection_documents_endpoint(
-    processor_id: str,
-    collection_name: str,
-    request: Dict[str, Any]
-):
-    """Bulk delete multiple documents from any collection"""
-    try:
-        document_ids = request.get('document_ids', [])
-
-        if not document_ids:
-            raise HTTPException(status_code=400, detail="No document IDs provided")
-
-        deleted_count = await bulk_delete_collection_documents(processor_id, collection_name, document_ids)
-
-        if deleted_count == 0:
-            raise HTTPException(
-                status_code=403,
-                detail="Bulk delete failed - database may be in read-only mode"
-            )
-
-        return {
-            "success": True,
-            "deleted_count": deleted_count,
-            "requested_count": len(document_ids)
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to bulk delete documents: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/databases/mongodb/{processor_id}/collections/{collection_name}/statistics")
-async def get_collection_statistics_endpoint(
-    processor_id: str,
-    collection_name: str
-):
-    """Get aggregated statistics for any collection"""
-    try:
-        stats = await get_collection_statistics(processor_id, collection_name)
-        return stats
-    except Exception as e:
-        logger.error(f"Failed to get collection statistics: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============================================================================
@@ -1110,4 +744,311 @@ async def get_comprehensive_analytics(
         return result
     except Exception as e:
         logger.error(f"Failed to get comprehensive analytics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# Hybrid Pattern Endpoints (ClickHouse + Redis)
+# ============================================================================
+
+
+@router.get("/databases/patterns/processors")
+async def list_pattern_processors():
+    """
+    List all processors from ClickHouse kb_ids.
+
+    Returns list of processors with pattern counts and statistics.
+    Uses hybrid architecture (ClickHouse + Redis).
+    """
+    try:
+        from app.db.hybrid_patterns import get_processors_hybrid
+        processors = await get_processors_hybrid()
+        return {"processors": processors, "total": len(processors)}
+    except Exception as e:
+        logger.error(f"Failed to list pattern processors: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/databases/patterns/{kb_id}/patterns")
+async def get_patterns_for_kb(
+    kb_id: str,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
+    sort_by: str = Query('length', regex='^(frequency|length|name|token_count|created_at)$'),
+    sort_order: int = Query(-1, ge=-1, le=1)
+):
+    """
+    Get patterns for specific kb_id from hybrid architecture.
+
+    Uses ClickHouse for pattern data and Redis for frequencies.
+    Supports pagination and multiple sort options.
+
+    Args:
+        kb_id: Knowledge base identifier (e.g., 'node0_kato')
+        skip: Pagination offset
+        limit: Results per page (max 500)
+        sort_by: Field to sort by (frequency, length, name, token_count, created_at)
+        sort_order: 1 for ASC, -1 for DESC
+
+    Note: Frequency sorting may take longer for kb_ids with >1M patterns
+    """
+    try:
+        from app.db.hybrid_patterns import get_patterns_hybrid
+        return await get_patterns_hybrid(kb_id, skip, limit, sort_by, sort_order)
+    except Exception as e:
+        logger.error(f"Failed to get patterns for {kb_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/databases/patterns/{kb_id}/patterns/{pattern_name}")
+async def get_pattern_detail(kb_id: str, pattern_name: str):
+    """
+    Get pattern with full metadata from hybrid architecture.
+
+    Fetches pattern data from ClickHouse and metadata from Redis.
+    Includes: frequency, emotives, metadata, and ClickHouse optimization fields.
+
+    Args:
+        kb_id: Knowledge base identifier
+        pattern_name: Pattern hash/name (SHA1 hash)
+    """
+    try:
+        from app.db.hybrid_patterns import get_pattern_by_id_hybrid
+        pattern = await get_pattern_by_id_hybrid(kb_id, pattern_name)
+
+        if not pattern:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Pattern {pattern_name} not found in {kb_id}"
+            )
+
+        return pattern
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get pattern {pattern_name}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/databases/patterns/{kb_id}/statistics")
+async def get_pattern_statistics_for_kb(kb_id: str):
+    """
+    Get aggregate pattern statistics for kb_id from ClickHouse.
+
+    Returns:
+        - total_patterns: Total pattern count
+        - avg_length: Average pattern length
+        - min_length: Minimum pattern length
+        - max_length: Maximum pattern length
+        - avg_token_count: Average unique token count
+    """
+    try:
+        from app.db.hybrid_patterns import get_pattern_statistics_hybrid
+        return await get_pattern_statistics_hybrid(kb_id)
+    except Exception as e:
+        logger.error(f"Failed to get statistics for {kb_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/databases/patterns/{kb_id}/patterns/{pattern_name}")
+async def delete_pattern_from_hybrid(kb_id: str, pattern_name: str):
+    """
+    Delete pattern from both ClickHouse + Redis (if not in read-only mode).
+
+    Args:
+        kb_id: Knowledge base identifier
+        pattern_name: Pattern hash/name to delete
+
+    Returns:
+        Success status
+    """
+    try:
+        from app.db.hybrid_patterns import delete_pattern_hybrid
+        success = await delete_pattern_hybrid(kb_id, pattern_name)
+
+        if not success:
+            raise HTTPException(
+                status_code=400,
+                detail="Failed to delete pattern (check read-only mode)"
+            )
+
+        return {
+            "success": True,
+            "kb_id": kb_id,
+            "pattern_name": pattern_name,
+            "message": f"Pattern {pattern_name} deleted successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete pattern {pattern_name}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/databases/patterns/{kb_id}/patterns/bulk-delete")
+async def bulk_delete_patterns_from_hybrid(kb_id: str, request: Dict[str, Any]):
+    """
+    Bulk delete multiple patterns from hybrid architecture.
+
+    Request body:
+    {
+        "pattern_names": ["pattern1", "pattern2", ...]
+    }
+
+    Returns:
+        {
+            "success": bool,
+            "clickhouse_deleted": int,
+            "redis_keys_deleted": int,
+            "total": int
+        }
+    """
+    try:
+        pattern_names = request.get('pattern_names', [])
+
+        if not pattern_names:
+            raise HTTPException(status_code=400, detail="No pattern names provided")
+
+        from app.db.hybrid_patterns import bulk_delete_patterns_hybrid
+        result = await bulk_delete_patterns_hybrid(kb_id, pattern_names)
+
+        if 'error' in result:
+            raise HTTPException(status_code=400, detail=result['error'])
+
+        return {
+            "success": True,
+            "kb_id": kb_id,
+            **result
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to bulk delete patterns: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/databases/patterns/{kb_id}")
+async def delete_knowledgebase_from_hybrid(kb_id: str):
+    """
+    Delete entire knowledgebase (all patterns) from hybrid architecture (ClickHouse + Redis).
+
+    This is a DESTRUCTIVE operation that removes ALL patterns for a kb_id.
+
+    Args:
+        kb_id: Knowledge base identifier to delete
+
+    Returns:
+        {
+            "success": bool,
+            "kb_id": str,
+            "clickhouse_deleted": int,
+            "redis_keys_deleted": int,
+            "message": str
+        }
+    """
+    try:
+        from app.db.hybrid_patterns import delete_knowledgebase_hybrid
+        result = await delete_knowledgebase_hybrid(kb_id)
+
+        if 'error' in result:
+            raise HTTPException(status_code=400, detail=result['error'])
+
+        return {
+            "success": True,
+            "kb_id": kb_id,
+            "clickhouse_deleted": result['clickhouse_deleted'],
+            "redis_keys_deleted": result['redis_keys_deleted'],
+            "message": f"Knowledgebase {kb_id} deleted successfully ({result['clickhouse_deleted']} patterns, {result['redis_keys_deleted']} Redis keys)"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete knowledgebase {kb_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/databases/hybrid/health")
+async def hybrid_health_check():
+    """
+    Check health of hybrid architecture (ClickHouse + Redis).
+
+    Returns connection status, latencies, and pattern counts.
+    """
+    try:
+        from app.db.hybrid_patterns import health_check_hybrid
+        return await health_check_hybrid()
+    except Exception as e:
+        logger.error(f"Failed to check hybrid health: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ========================================================================
+# Symbol Statistics Endpoints (Redis-backed symbols_kb)
+# ========================================================================
+
+@router.get("/databases/symbols/processors")
+async def get_symbol_processors():
+    """
+    Get list of processors (kb_ids) that have symbol data.
+
+    Returns:
+        List of processors with symbol counts
+    """
+    try:
+        from app.db.symbol_stats import get_processors_with_symbols
+        return {
+            'processors': await get_processors_with_symbols()
+        }
+    except Exception as e:
+        logger.error(f"Failed to get symbol processors: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/databases/symbols/{kb_id}")
+async def get_symbols_for_kb(
+    kb_id: str,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
+    sort_by: str = Query('frequency', regex='^(frequency|pmf|name|ratio)$'),
+    sort_order: int = Query(-1, ge=-1, le=1),
+    search: Optional[str] = Query(None)
+):
+    """
+    Get paginated, sorted symbol data for a kb_id.
+
+    Args:
+        kb_id: Knowledge base identifier (e.g., 'node0_kato')
+        skip: Pagination offset
+        limit: Results per page (max 500)
+        sort_by: Field to sort by (frequency, pmf, name, ratio)
+        sort_order: 1 for ASC, -1 for DESC
+        search: Optional substring to filter symbol names
+
+    Returns:
+        Paginated symbols list with statistics
+    """
+    try:
+        from app.db.symbol_stats import get_symbols_paginated
+        return await get_symbols_paginated(kb_id, skip, limit, sort_by, sort_order, search)
+    except Exception as e:
+        logger.error(f"Failed to get symbols for {kb_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/databases/symbols/{kb_id}/statistics")
+async def get_symbol_statistics_for_kb(kb_id: str):
+    """
+    Get aggregate statistics for all symbols in a kb_id.
+
+    Args:
+        kb_id: Knowledge base identifier
+
+    Returns:
+        Dictionary with aggregate stats (total, averages, top symbols)
+    """
+    try:
+        from app.db.symbol_stats import get_symbol_statistics
+        return await get_symbol_statistics(kb_id)
+    except Exception as e:
+        logger.error(f"Failed to get symbol statistics for {kb_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))

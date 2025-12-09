@@ -236,7 +236,7 @@ class SessionManager:
             from app.core.config import get_settings
             settings = get_settings()
 
-            if settings.mongo_read_only:
+            if settings.database_read_only:
                 logger.warning("System is in read-only mode, delete rejected")
                 return False
 
@@ -271,7 +271,7 @@ class SessionManager:
             from app.core.config import get_settings
             settings = get_settings()
 
-            if settings.mongo_read_only:
+            if settings.database_read_only:
                 logger.warning("System is in read-only mode, bulk delete rejected")
                 return {
                     "success": False,
@@ -428,7 +428,7 @@ class SessionManager:
             from app.core.config import get_settings
             settings = get_settings()
 
-            if settings.mongo_read_only:
+            if settings.database_read_only:
                 logger.warning("System is in read-only mode, cleanup rejected")
                 return {
                     "success": False,

@@ -1,9 +1,9 @@
 # KATO Dashboard - Project Overview
 
 **Project Name**: KATO Dashboard
-**Status**: Phase 2 Complete + Enhancements
+**Status**: Phase 2 Complete + Enhancements + KB Deletion + MongoDB Removal
 **Started**: 2025-10-06
-**Last Updated**: 2025-10-10 14:30:00
+**Last Updated**: 2025-12-03
 **Repository**: /Users/sevakavakians/PROGRAMMING/kato-dashboard
 
 ## Purpose
@@ -12,10 +12,11 @@ A comprehensive web-based monitoring and management dashboard for the KATO AI sy
 ## Scope
 - Isolated optional container that connects to KATO and its databases
 - Real-time system monitoring with auto-refresh
-- Database management (MongoDB, Qdrant, Redis)
+- Database management (ClickHouse, Redis, Qdrant) - **MongoDB removed 2025-12-03**
+- Knowledgebase deletion capability (hybrid ClickHouse + Redis)
 - Session lifecycle management
 - Analytics and pattern visualization
-- Read-only database access by default (configurable)
+- Read-only database access by default (configurable via DATABASE_READ_ONLY)
 
 ## Technology Stack
 
@@ -23,9 +24,10 @@ A comprehensive web-based monitoring and management dashboard for the KATO AI sy
 - **Framework**: FastAPI (Python 3.11+)
 - **Real-time**: WebSocket support with connection manager
 - **Database Clients**:
-  - Motor (async MongoDB)
-  - Qdrant Client
-  - Redis (async)
+  - ClickHouse (async client for pattern storage)
+  - Redis (async client for metadata and caching)
+  - Qdrant Client (vector database)
+  - **Note**: MongoDB removed 2025-12-03 (architecture simplification)
 - **HTTP Client**: httpx
 - **Configuration**: pydantic settings
 - **Containerization**: Docker multi-stage builds
@@ -126,9 +128,48 @@ kato-dashboard/
 └── planning-docs/              # Project management docs
 ```
 
-## Current Status: Phase 2 Complete + 1 Enhancement Feature ✅
+## Current Status: Phase 2 Complete + 2 Enhancement Features + KB Deletion + MongoDB Removal ✅
 
-### Latest Enhancement: MongoDB Multi-Collection Viewer (COMPLETE - 2025-10-10 14:30:00)
+### Latest Changes: KB Deletion & MongoDB Removal (COMPLETE - 2025-12-03)
+
+**Phase 1: Knowledgebase Deletion Feature**
+- Added DELETE /api/v1/databases/patterns/{kb_id} endpoint
+- Hybrid deletion from both ClickHouse and Redis
+- Double confirmation UI (type KB ID + final confirm)
+- Respects DATABASE_READ_ONLY flag for permission control
+- Detailed feedback showing deletion counts per storage layer
+- ~140 lines of code added across 5 files
+
+**Phase 2: MongoDB Removal (Architecture Simplification)**
+- Complete removal of MongoDB from the stack
+- Deleted backend/app/db/mongodb.py (~500 lines)
+- Removed 12 MongoDB API endpoints (lines 317-664 from routes.py)
+- Removed motor dependency from requirements.txt
+- Renamed MONGO_READ_ONLY to DATABASE_READ_ONLY (unified configuration)
+- Updated all Python files to use settings.database_read_only
+- Removed MongoDB environment variables from .env.example and docker-compose.yml
+- Removed all MongoDB methods from frontend API client (~150 lines)
+- **Net Result**: -510 lines of code, -1 dependency, -11 API endpoints
+- **New Architecture**: ClickHouse (patterns) + Redis (metadata) + Qdrant (vectors)
+
+### Previous Enhancement: Symbols KB Browser (COMPLETE - 2025-11-13)
+
+**Feature**: Redis-Backed Symbol Statistics Browser
+- Full-stack implementation for viewing Redis-backed symbol statistics
+- 3 new backend API endpoints (processors, symbols, statistics)
+- New symbol_stats.py module for Redis operations (~259 lines)
+- New SymbolsBrowser.tsx component (~409 lines)
+- Support for pagination, sorting (4 options), and search
+- Visual frequency indicators with color-coded badges
+- Aggregate statistics computation
+- Auto-refresh every 30 seconds
+- Zero TypeScript errors, fully deployed
+- ~785 lines of code added across 5 files
+- Backend: symbol_stats.py (new), routes.py (modified)
+- Frontend: SymbolsBrowser.tsx (new), api.ts (modified), Databases.tsx (modified)
+- Ready for data (currently empty - waiting for KATO to populate Redis)
+
+### Previous Enhancement: MongoDB Multi-Collection Viewer (COMPLETE - 2025-10-10 14:30:00)
 
 **Feature**: Multi-Collection Viewer for MongoDB Collections
 - Extended MongoDB browser to support multiple collections simultaneously
@@ -227,7 +268,31 @@ kato-dashboard/
    - Copy to clipboard functionality
    - Real-time auto-refresh (10s)
 
+✅ **Symbols KB Browser** (Added 2025-11-13)
+   - Redis-backed symbol statistics viewing
+   - Processor selection (list all kb_ids with symbol data)
+   - Symbol list with pagination (100 per page)
+   - Multiple sort options (frequency, PMF, name, ratio)
+   - Search filtering by symbol name (500ms debounce)
+   - Visual frequency indicators (bars and color-coded badges)
+   - Aggregate statistics display (total, averages, max values)
+   - Auto-refresh every 30 seconds
+   - Responsive design with dark mode support
+
 ### Future Features (Phase 3+)
+
+**Symbols KB Enhancements**:
+- Export functionality for symbol data (CSV/JSON)
+- Advanced search (regex, multi-field filters)
+- Symbol detail modal with comprehensive info
+- Symbol deletion capability (admin only)
+- Comparison view across processors
+- Frequency charts and visualizations
+- Symbol recommendations engine
+- Batch operations for symbols
+- Real-time WebSocket updates for symbols
+
+**General Enhancements**:
 - User authentication and authorization
 - Alert system with configurable thresholds
 - Export functionality (CSV/JSON) for all collections
@@ -264,7 +329,7 @@ kato-dashboard/
 - **Features**: 3 major features (all complete)
 - **Status**: 100% Complete ✅
 
-### Post-Phase 2 Enhancements
+### Post-Phase 2 Enhancement #1
 - **Feature**: MongoDB Multi-Collection Viewer
 - **Estimated Duration**: ~4 hours
 - **Actual Duration**: ~3 hours
@@ -272,26 +337,37 @@ kato-dashboard/
 - **Status**: COMPLETE ✅
 - **Date**: 2025-10-10
 
-### Cumulative (Through Phase 2 + Enhancements)
-- **Total Files**: 57+ (5 new in Phase 2, 1 new in enhancements)
-- **Total Lines of Code**: ~7,851+ (~2,115 in Phase 2, ~1,270 in enhancements)
-- **Backend Endpoints**: 48+ HTTP + 1 WebSocket (11 in Phase 2, 6 in enhancements)
+### Post-Phase 2 Enhancement #2
+- **Feature**: Symbols KB Browser (Redis-backed)
+- **Estimated Duration**: ~6 hours
+- **Actual Duration**: ~5 hours
+- **Efficiency**: 120% (17% faster than estimated)
+- **Status**: COMPLETE ✅
+- **Date**: 2025-11-13
+
+### Cumulative (Through Phase 2 + 2 Enhancements + KB Deletion + MongoDB Removal)
+- **Total Files**: 58+ (5 new in Phase 2, 3 new in enhancements, 1 deleted in MongoDB removal)
+- **Total Lines of Code**: ~8,266+ (~2,115 in Phase 2, ~1,270 in enhancement #1, ~785 in enhancement #2, +140 KB deletion, -650 MongoDB removal)
+- **Backend Endpoints**: 41 HTTP + 1 WebSocket (11 in Phase 2, 6 in enhancement #1, 3 in enhancement #2, +1 KB deletion, -12 MongoDB removal)
 - **Backend Services**: 3 (kato_api.py, analytics.py, websocket.py)
-- **Backend Collections Support**: Generic system supports any MongoDB collection
+- **Backend Database Modules**: 4 (clickhouse.py, qdrant.py, redis_client.py, symbol_stats.py + hybrid_patterns.py)
+- **Database Architecture**: ClickHouse + Redis + Qdrant (MongoDB removed 2025-12-03)
 - **Frontend Pages**: 6 (Dashboard, Sessions, SessionDetail, Databases, VectorBrowser, Analytics)
-- **Frontend Components**: 10+ (including 2 generic collection components)
+- **Frontend Components**: 11+ (including 2 generic collection components + SymbolsBrowser)
+- **Database Browser Tabs**: 3 (Patterns [ClickHouse], Symbols [Redis], Redis Keys) - MongoDB tab removed
 - **Docker Containers**: 2
-- **Total Development Time**: ~17 hours
+- **Total Development Time**: ~28 hours
 
 ## Configuration
 
 ### Environment Variables
 See `.env.example` for full list. Key variables:
 - `KATO_API_URL`: KATO backend URL (default: http://kato:8000)
-- `MONGODB_URL`: MongoDB connection string
-- `QDRANT_URL`: Qdrant server URL
-- `REDIS_URL`: Redis connection string
-- `MONGODB_READ_ONLY`: Enable read-only mode (default: true)
+- `CLICKHOUSE_URL`: ClickHouse server URL (default: http://clickhouse:9000)
+- `QDRANT_URL`: Qdrant server URL (default: http://qdrant:6333)
+- `REDIS_URL`: Redis connection string (default: redis://redis:6379)
+- `DATABASE_READ_ONLY`: Enable read-only mode for all databases (default: true)
+  - **Note**: Renamed from MONGO_READ_ONLY on 2025-12-03 (applies to all databases)
 
 ### Quick Start
 ```bash
@@ -308,11 +384,12 @@ docker-compose up -d
 
 ### Python (Backend)
 - fastapi >= 0.104.0
-- motor >= 3.3.0
+- clickhouse-connect >= 0.6.0
 - qdrant-client >= 1.7.0
 - redis >= 5.0.0
 - httpx >= 0.25.0
 - pydantic-settings >= 2.0.0
+- **Note**: motor (MongoDB driver) removed 2025-12-03
 
 ### Node.js (Frontend)
 - react >= 18.2.0

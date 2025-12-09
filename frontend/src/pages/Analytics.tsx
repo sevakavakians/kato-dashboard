@@ -79,7 +79,15 @@ export default function Analytics() {
   })) || []
 
   // Format performance data for chart
-  const performanceChartData = performanceData?.time_series || []
+  // Note: time_series from backend is an object, not an array
+  // For now, use current_metrics as a single data point if available
+  const performanceChartData = performanceData?.current_metrics
+    ? [{
+        timestamp: new Date().toLocaleTimeString(),
+        cpu_percent: performanceData.current_metrics.cpu_percent || 0,
+        memory_percent: performanceData.current_metrics.memory_percent || 0
+      }]
+    : []
 
   // Get load prediction metrics
   const currentLoad = loadPredictions?.current_load || {}
@@ -208,25 +216,25 @@ export default function Analytics() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-              MongoDB Statistics
+              Knowledgebase Statistics
             </h3>
             <div className="space-y-3">
               <div>
                 <p className="text-sm text-gray-500 dark:text-gray-400">Total Processors</p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {dbStats.mongodb?.processors}
+                  {dbStats.clickhouse?.processors}
                 </p>
               </div>
               <div>
                 <p className="text-sm text-gray-500 dark:text-gray-400">Total Patterns</p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {dbStats.mongodb?.total_patterns}
+                  {dbStats.clickhouse?.total_patterns}
                 </p>
               </div>
               <div>
                 <p className="text-sm text-gray-500 dark:text-gray-400">Avg Patterns/Processor</p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {dbStats.mongodb?.avg_patterns_per_processor}
+                  {dbStats.clickhouse?.avg_patterns_per_processor}
                 </p>
               </div>
             </div>

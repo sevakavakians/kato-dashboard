@@ -25,8 +25,8 @@ async def get_redis_client() -> redis.Redis:
                 settings.redis_url,
                 encoding="utf-8",
                 decode_responses=True,
-                socket_connect_timeout=5,
-                socket_timeout=5
+                socket_connect_timeout=10,
+                socket_timeout=60  # Increased for large symbol scans
             )
             # Test connection
             await _redis_client.ping()
@@ -162,7 +162,7 @@ async def delete_key(key: str) -> bool:
         True if deleted, False otherwise
     """
     settings = get_settings()
-    if settings.mongo_read_only:  # Using same read-only flag for Redis
+    if settings.database_read_only:  # Using same read-only flag for Redis
         logger.warning("Redis is in read-only mode, delete rejected")
         return False
 
@@ -187,7 +187,7 @@ async def flush_cache(pattern: Optional[str] = None) -> int:
         Number of keys deleted
     """
     settings = get_settings()
-    if settings.mongo_read_only:
+    if settings.database_read_only:
         logger.warning("Redis is in read-only mode, flush rejected")
         return 0
 
@@ -206,4 +206,310 @@ async def flush_cache(pattern: Optional[str] = None) -> int:
             return -1  # Indicate all keys flushed
     except Exception as e:
         logger.error(f"Failed to flush cache: {e}")
+        return 0
+
+
+# ============================================================================
+# Pattern Metadata Operations (ClickHouse + Redis Hybrid Architecture)
+# ============================================================================
+
+
+async def get_pattern_frequency(kb_id: str, pattern_name: str) -> int:
+    """
+    Get frequency for a pattern from Redis.
+
+    Redis key format: {kb_id}:frequency:{pattern_name}
+
+    Args:
+        kb_id: Knowledge base identifier (e.g., 'node0_kato')
+        pattern_name: Pattern hash/name (SHA1 hash)
+
+    Returns:
+        Frequency count (integer), 0 if not found
+    """
+    client = await get_redis_client()
+
+    key = f"{kb_id}:frequency:{pattern_name}"
+
+    try:
+        freq = await client.get(key)
+        return int(freq) if freq else 0
+    except Exception as e:
+        logger.error(f"Failed to get frequency for {pattern_name}: {e}")
+        return 0
+
+
+async def get_patterns_frequencies_batch(kb_id: str, pattern_names: List[str]) -> Dict[str, int]:
+    """
+    Batch fetch frequencies for multiple patterns using Redis pipeline.
+
+    This is significantly faster than individual GETs when fetching
+    metadata for many patterns (e.g., a full page of results).
+
+    Args:
+        kb_id: Knowledge base identifier
+        pattern_names: List of pattern hashes/names
+
+    Returns:
+        Dictionary mapping pattern_name -> frequency
+    """
+    if not pattern_names:
+        return {}
+
+    client = await get_redis_client()
+
+    try:
+        async with client.pipeline(transaction=False) as pipe:
+            for name in pattern_names:
+                pipe.get(f"{kb_id}:frequency:{name}")
+
+            results = await pipe.execute()
+
+        # Build dict mapping pattern_name -> frequency
+        frequencies = {}
+        for name, freq in zip(pattern_names, results):
+            frequencies[name] = int(freq) if freq else 0
+
+        return frequencies
+    except Exception as e:
+        logger.error(f"Failed to batch fetch frequencies: {e}")
+        # Return empty dict on error
+        return {name: 0 for name in pattern_names}
+
+
+async def get_pattern_emotives(kb_id: str, pattern_name: str) -> Dict[str, Any]:
+    """
+    Get emotives hash for a pattern from Redis.
+
+    Redis key format: {kb_id}:emotives:{pattern_name}
+    Values are JSON-serialized arrays stored as hash fields.
+
+    Args:
+        kb_id: Knowledge base identifier
+        pattern_name: Pattern hash/name
+
+    Returns:
+        Dictionary of emotives (e.g., {'joy': [0.5, 0.6], 'anger': [0.1]})
+        Empty dict if not found or not yet migrated
+    """
+    client = await get_redis_client()
+
+    key = f"{kb_id}:emotives:{pattern_name}"
+
+    try:
+        emotives_raw = await client.hgetall(key)
+
+        if not emotives_raw:
+            return {}
+
+        # Deserialize JSON values
+        import json
+        emotives = {}
+        for k, v in emotives_raw.items():
+            try:
+                emotives[k] = json.loads(v)
+            except json.JSONDecodeError:
+                # Fallback to raw value if not JSON
+                emotives[k] = v
+
+        return emotives
+    except Exception as e:
+        logger.error(f"Failed to get emotives for {pattern_name}: {e}")
+        return {}
+
+
+async def get_pattern_metadata(kb_id: str, pattern_name: str) -> Dict[str, Any]:
+    """
+    Get metadata hash for a pattern from Redis.
+
+    Redis key format: {kb_id}:metadata:{pattern_name}
+    Values are JSON-serialized data stored as hash fields.
+
+    Args:
+        kb_id: Knowledge base identifier
+        pattern_name: Pattern hash/name
+
+    Returns:
+        Dictionary of metadata fields
+        Empty dict if not found or not yet migrated
+    """
+    client = await get_redis_client()
+
+    key = f"{kb_id}:metadata:{pattern_name}"
+
+    try:
+        metadata_raw = await client.hgetall(key)
+
+        if not metadata_raw:
+            return {}
+
+        # Deserialize JSON values
+        import json
+        metadata = {}
+        for k, v in metadata_raw.items():
+            try:
+                metadata[k] = json.loads(v)
+            except json.JSONDecodeError:
+                # Fallback to raw value if not JSON
+                metadata[k] = v
+
+        return metadata
+    except Exception as e:
+        logger.error(f"Failed to get metadata for {pattern_name}: {e}")
+        return {}
+
+
+async def set_pattern_frequency(kb_id: str, pattern_name: str, frequency: int) -> bool:
+    """
+    Set frequency for a pattern in Redis (if not in read-only mode).
+
+    Args:
+        kb_id: Knowledge base identifier
+        pattern_name: Pattern hash/name
+        frequency: New frequency value
+
+    Returns:
+        True if set successfully, False otherwise
+    """
+    settings = get_settings()
+    if settings.database_read_only:
+        logger.warning("Redis is in read-only mode, set frequency rejected")
+        return False
+
+    client = await get_redis_client()
+
+    key = f"{kb_id}:frequency:{pattern_name}"
+
+    try:
+        await client.set(key, frequency)
+        logger.info(f"Set frequency for {pattern_name}: {frequency}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to set frequency for {pattern_name}: {e}")
+        return False
+
+
+async def delete_pattern_metadata(kb_id: str, pattern_name: str) -> bool:
+    """
+    Delete all Redis metadata for a pattern (frequency, emotives, metadata).
+
+    Used when deleting a pattern from the hybrid architecture.
+
+    Args:
+        kb_id: Knowledge base identifier
+        pattern_name: Pattern hash/name to delete
+
+    Returns:
+        True if deleted, False otherwise
+    """
+    settings = get_settings()
+    if settings.database_read_only:
+        logger.warning("Redis is in read-only mode, delete rejected")
+        return False
+
+    client = await get_redis_client()
+
+    keys_to_delete = [
+        f"{kb_id}:frequency:{pattern_name}",
+        f"{kb_id}:emotives:{pattern_name}",
+        f"{kb_id}:metadata:{pattern_name}"
+    ]
+
+    try:
+        deleted = await client.delete(*keys_to_delete)
+        logger.info(f"Deleted Redis metadata for {pattern_name}: {deleted} keys")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to delete Redis metadata for {pattern_name}: {e}")
+        return False
+
+
+async def bulk_delete_pattern_metadata(kb_id: str, pattern_names: List[str]) -> int:
+    """
+    Bulk delete Redis metadata for multiple patterns.
+
+    Args:
+        kb_id: Knowledge base identifier
+        pattern_names: List of pattern hashes/names to delete
+
+    Returns:
+        Number of keys deleted
+    """
+    settings = get_settings()
+    if settings.database_read_only:
+        logger.warning("Redis is in read-only mode, bulk delete rejected")
+        return 0
+
+    if not pattern_names:
+        return 0
+
+    client = await get_redis_client()
+
+    # Build list of all keys to delete
+    keys_to_delete = []
+    for name in pattern_names:
+        keys_to_delete.extend([
+            f"{kb_id}:frequency:{name}",
+            f"{kb_id}:emotives:{name}",
+            f"{kb_id}:metadata:{name}"
+        ])
+
+    try:
+        deleted = await client.delete(*keys_to_delete)
+        logger.info(f"Bulk deleted Redis metadata for {len(pattern_names)} patterns: {deleted} keys")
+        return deleted
+    except Exception as e:
+        logger.error(f"Failed to bulk delete Redis metadata: {e}")
+        return 0
+
+
+async def delete_kb_metadata(kb_id: str) -> int:
+    """
+    Delete ALL Redis metadata for a kb_id.
+
+    This deletes all keys matching patterns:
+    - {kb_id}:frequency:*
+    - {kb_id}:emotives:*
+    - {kb_id}:metadata:*
+
+    Args:
+        kb_id: Knowledge base identifier to delete
+
+    Returns:
+        Total number of keys deleted
+    """
+    settings = get_settings()
+    if settings.database_read_only:
+        logger.warning("Redis is in read-only mode, kb_id metadata delete rejected")
+        return 0
+
+    client = await get_redis_client()
+
+    try:
+        total_deleted = 0
+
+        # Delete all keys for each metadata type
+        for key_type in ['frequency', 'emotives', 'metadata']:
+            pattern = f"{kb_id}:{key_type}:*"
+
+            # Scan for keys matching pattern
+            keys_to_delete = []
+            async for key in client.scan_iter(match=pattern, count=1000):
+                keys_to_delete.append(key)
+
+                # Delete in batches of 1000
+                if len(keys_to_delete) >= 1000:
+                    deleted = await client.delete(*keys_to_delete)
+                    total_deleted += deleted
+                    keys_to_delete = []
+
+            # Delete remaining keys
+            if keys_to_delete:
+                deleted = await client.delete(*keys_to_delete)
+                total_deleted += deleted
+
+        logger.info(f"Deleted all Redis metadata for kb_id {kb_id}: {total_deleted} keys")
+        return total_deleted
+    except Exception as e:
+        logger.error(f"Failed to delete Redis metadata for kb_id {kb_id}: {e}")
         return 0

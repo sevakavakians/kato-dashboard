@@ -157,7 +157,7 @@ start_dashboard() {
     # Check frontend health
     attempt=0
     while [ $attempt -lt $max_attempts ]; do
-        if curl -s http://localhost:3000/health > /dev/null 2>&1; then
+        if curl -s http://localhost:3001/health > /dev/null 2>&1; then
             print_success "Frontend is healthy"
             break
         fi
@@ -174,7 +174,7 @@ start_dashboard() {
     print_success "Dashboard started successfully!"
     echo ""
     print_info "Access the dashboard at:"
-    echo -e "  ${GREEN}Frontend:${NC}  http://localhost:3000"
+    echo -e "  ${GREEN}Frontend:${NC}  http://localhost:3001"
     echo -e "  ${GREEN}Backend:${NC}   http://localhost:8080"
     echo -e "  ${GREEN}API Docs:${NC}  http://localhost:8080/docs"
     echo ""
@@ -227,7 +227,7 @@ restart_dashboard() {
         print_error "Backend health check failed"
     fi
 
-    if curl -s http://localhost:3000/health > /dev/null 2>&1; then
+    if curl -s http://localhost:3001/health > /dev/null 2>&1; then
         print_success "Frontend is healthy"
     else
         print_error "Frontend health check failed"
@@ -270,10 +270,10 @@ show_status() {
     fi
 
     # Frontend
-    if curl -s http://localhost:3000/health > /dev/null 2>&1; then
-        print_success "Frontend: http://localhost:3000 - Healthy"
+    if curl -s http://localhost:3001/health > /dev/null 2>&1; then
+        print_success "Frontend: http://localhost:3001 - Healthy"
     else
-        print_error "Frontend: http://localhost:3000 - Not responding"
+        print_error "Frontend: http://localhost:3001 - Not responding"
     fi
 
     echo ""
@@ -447,7 +447,7 @@ test_endpoints() {
 
     # Frontend health
     print_step "Testing frontend health..."
-    if curl -s http://localhost:3000/health > /dev/null 2>&1; then
+    if curl -s http://localhost:3001/health > /dev/null 2>&1; then
         print_success "Frontend health: OK"
     else
         print_error "Frontend health check failed"
@@ -508,7 +508,7 @@ show_help() {
     echo "  ./dashboard.sh build --no-cache # Rebuild from scratch"
     echo ""
     echo "URLs:"
-    echo "  Frontend:  http://localhost:3000"
+    echo "  Frontend:  http://localhost:3001"
     echo "  Backend:   http://localhost:8080"
     echo "  API Docs:  http://localhost:8080/docs"
     echo ""

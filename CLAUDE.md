@@ -15,7 +15,7 @@ KATO Dashboard is a comprehensive web-based monitoring and management system for
 │    KATO Dashboard (Isolated Container)  │
 │  ┌─────────────┐      ┌──────────────┐  │
 │  │  React UI   │◄────►│FastAPI Backend│  │
-│  │  (Port 3000)│      │  (Port 8080) │  │
+│  │  (Port 3001)│      │  (Port 8080) │  │
 │  └─────────────┘      └──────────────┘  │
 │         │                      │         │
 └─────────┼──────────────────────┼─────────┘
@@ -25,7 +25,7 @@ KATO Dashboard is a comprehensive web-based monitoring and management system for
 │         KATO Network (kato_kato-network) │
 │                                           │
 │  ┌────────┐  ┌────────┐  ┌────────┐     │
-│  │MongoDB │  │ Qdrant │  │ Redis  │     │
+│  │ClickHouse │  │ Qdrant │  │ Redis  │     │
 │  └────────┘  └────────┘  └────────┘     │
 │                                           │
 │  ┌────────────────────────────────────┐  │
@@ -36,7 +36,7 @@ KATO Dashboard is a comprehensive web-based monitoring and management system for
 
 ### Backend Stack
 - **Framework**: FastAPI (Python 3.11+)
-- **Database Clients**: Motor (MongoDB async), Qdrant Client, Redis
+- **Database Clients**: ClickHouse Connect, Qdrant Client, Redis (async)
 - **HTTP Client**: httpx for KATO API communication
 - **Server**: Uvicorn with async/await
 
@@ -144,7 +144,7 @@ make dev-frontend
 # Option 2: Manual
 cd frontend
 npm install
-npm run dev  # Starts on http://localhost:3000
+npm run dev  # Starts on http://localhost:3001
 
 # Build for production
 npm run build
@@ -189,9 +189,11 @@ backend/
 │   │   └── config.py           # Configuration management
 │   ├── db/
 │   │   ├── __init__.py
-│   │   ├── mongodb.py          # MongoDB async client
+│   │   ├── clickhouse.py       # ClickHouse async client
 │   │   ├── qdrant.py           # Qdrant client
-│   │   └── redis_client.py     # Redis async client
+│   │   ├── redis_client.py     # Redis async client
+│   │   ├── hybrid_patterns.py  # Hybrid ClickHouse+Redis pattern storage
+│   │   └── symbol_stats.py     # Redis-backed symbol statistics
 │   └── services/
 │       ├── __init__.py
 │       └── kato_api.py         # KATO API client
@@ -211,11 +213,12 @@ frontend/
 │   ├── components/
 │   │   ├── Layout.tsx          # Main layout with sidebar
 │   │   ├── Card.tsx            # Reusable card components
-│   │   └── StatCard.tsx        # Stat display card
+│   │   ├── StatCard.tsx        # Stat display card
+│   │   └── SymbolsBrowser.tsx  # Symbol statistics browser
 │   ├── pages/
 │   │   ├── Dashboard.tsx       # Main dashboard page
 │   │   ├── Sessions.tsx        # Session management page
-│   │   ├── Databases.tsx       # Database browser page
+│   │   ├── Databases.tsx       # Database browser page (with Symbols tab)
 │   │   ├── Analytics.tsx       # Analytics page
 │   │   └── NotFound.tsx        # 404 page
 │   ├── lib/
@@ -254,12 +257,12 @@ frontend/
 
 ### 3. Database Access (Read-Only)
 **Locations**:
-- MongoDB: `backend/app/db/mongodb.py`
+- ClickHouse: `backend/app/db/mongodb.py`
 - Qdrant: `backend/app/db/qdrant.py`
 - Redis: `backend/app/db/redis_client.py`
 
 **Important**:
-- All connections are READ-ONLY by default (`MONGO_READ_ONLY=true`)
+- All connections are READ-ONLY by default (`DATABASE_READ_ONLY=true`)
 - Write operations (update/delete) check read-only flag
 - Connection pooling for performance
 - Health checks for monitoring
@@ -279,12 +282,13 @@ All endpoints are prefixed with `/api/v1`:
 - `GET /sessions/{id}` - Session details
 - `GET /sessions/{id}/stm` - Session STM
 
-**MongoDB**:
-- `GET /databases/mongodb/processors` - List all processors
-- `GET /databases/mongodb/{processor_id}/patterns` - Get patterns (with pagination)
-- `GET /databases/mongodb/{processor_id}/statistics` - Pattern statistics
-- `PUT /databases/mongodb/{processor_id}/patterns/{id}` - Update pattern
-- `DELETE /databases/mongodb/{processor_id}/patterns/{id}` - Delete pattern
+**Hybrid Patterns** (ClickHouse + Redis):
+- `GET /databases/patterns/processors` - List all knowledgebases with pattern counts
+- `GET /databases/patterns/{kb_id}/patterns` - Get patterns (with pagination, search, sorting)
+- `GET /databases/patterns/{kb_id}/statistics` - Pattern statistics for knowledgebase
+- `DELETE /databases/patterns/{kb_id}/patterns/{pattern_name}` - Delete single pattern
+- `POST /databases/patterns/{kb_id}/patterns/bulk-delete` - Bulk delete patterns
+- `DELETE /databases/patterns/{kb_id}` - Delete entire knowledgebase
 
 **Qdrant**:
 - `GET /databases/qdrant/collections` - List all collections
@@ -297,8 +301,48 @@ All endpoints are prefixed with `/api/v1`:
 - `GET /databases/redis/sessions` - Session keys
 - `POST /databases/redis/flush` - Flush cache (admin only)
 
+**Symbols** (Redis-backed):
+- `GET /databases/symbols/processors` - List processors with symbol data
+- `GET /databases/symbols/{kb_id}` - Get paginated symbols (supports: skip, limit, sort_by, sort_order, search)
+- `GET /databases/symbols/{kb_id}/statistics` - Get aggregate statistics
+
 **Analytics**:
 - `GET /analytics/overview` - Comprehensive overview
+
+### 5. UI Patterns for Destructive Operations
+**Location**: `frontend/src/pages/Databases.tsx`
+
+The dashboard implements consistent UI patterns for destructive operations (deletions) with appropriate safeguards:
+
+**Double Confirmation Pattern**:
+- **Single Knowledgebase Deletion**: Uses simple double confirmation (two `window.confirm` dialogs)
+  - First confirmation: Shows warning with details (KB ID, pattern count, what will be deleted)
+  - Second confirmation: Final "Are you absolutely sure?" message
+  - No typed confirmation required - simpler UX for single deletions
+
+**Bulk Selection and Deletion**:
+- **Checkbox Selection**: All list views (processors, patterns, collections, points) support checkbox selection
+  - Individual checkboxes for each item
+  - "Select All" toggle in header
+  - Visual feedback for selected items
+- **Bulk Delete Button**: Appears when items are selected, shows count
+- **Bulk Delete Confirmation**:
+  - First confirmation: Shows list of items to delete and counts
+  - Second confirmation: Final warning with total impact
+  - Results summary after completion (success/failure counts)
+
+**Implemented For**:
+- Knowledgebases (single + bulk): Delete entire KB with all patterns
+- Patterns (single + bulk): Delete patterns from a knowledgebase
+- Qdrant Collections (single + bulk): Delete vector collections
+- Qdrant Points (bulk): Delete vectors from a collection
+
+**Design Rationale**:
+- Simple double confirmation for single deletions (no typing required)
+- Bulk operations show comprehensive impact before proceeding
+- Consistent pattern across all database entities
+- Results feedback helps users understand what succeeded/failed
+- All operations respect `DATABASE_READ_ONLY` flag on backend
 
 ## Configuration
 
@@ -311,8 +355,7 @@ Create `.env` file in `backend/` directory:
 KATO_API_URL=http://kato:8000
 
 # Database Connections (Read-Only)
-MONGO_URL=mongodb://mongodb:27017
-MONGO_READ_ONLY=true
+DATABASE_READ_ONLY=true
 QDRANT_URL=http://qdrant:6333
 REDIS_URL=redis://redis:6379
 
@@ -329,7 +372,7 @@ ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 
 # CORS
-CORS_ORIGINS=http://localhost:3000,http://localhost:8080
+CORS_ORIGINS=http://localhost:3001,http://localhost:8080
 
 # Cache Configuration
 CACHE_TTL_SECONDS=30
@@ -369,7 +412,7 @@ docker-compose logs -f
 ```
 
 ### Accessing Services
-- **Frontend**: http://localhost:3000
+- **Frontend**: http://localhost:3001
 - **Backend API**: http://localhost:8080
 - **API Docs**: http://localhost:8080/docs
 
@@ -377,7 +420,7 @@ docker-compose logs -f
 
 Both services have health check endpoints:
 - Backend: `curl http://localhost:8080/health`
-- Frontend: `curl http://localhost:3000/health`
+- Frontend: `curl http://localhost:3001/health`
 
 ## Development Workflow
 
@@ -491,26 +534,31 @@ docker exec -it kato-dashboard-backend python -c "from app.db.mongodb import get
 
 ## Security Considerations
 
-1. **Read-Only Mode**: Enabled by default for MongoDB
+1. **Read-Only Mode**: Enabled by default for ClickHouse
 2. **Admin Auth**: TODO - Implement JWT authentication
 3. **CORS**: Restricted to configured origins
 4. **Rate Limiting**: TODO - Add rate limiting middleware
 5. **Input Validation**: Pydantic models for all inputs
-6. **SQL Injection**: N/A - using MongoDB with proper queries
+6. **SQL Injection**: N/A - using ClickHouse with proper queries
 
 ## Future Enhancements
 
+### Completed Features
+- [x] WebSocket support for real-time updates (Phases 1-4 complete)
+- [x] Session management UI (view/delete sessions)
+- [x] Docker container stats monitoring
+- [x] Knowledgebase deletion from UI
+- [x] Bulk delete operations for patterns
+
 ### Planned Features
-- [ ] WebSocket support for real-time updates
-- [ ] Session management UI (view/delete sessions)
-- [ ] Pattern editing interface
-- [ ] Vector visualization (t-SNE/UMAP)
-- [ ] Alert system for thresholds
-- [ ] Export functionality (CSV/JSON)
-- [ ] Dark mode toggle
-- [ ] User authentication
-- [ ] Audit logging
+- [ ] Pattern editing interface (update pattern data)
+- [ ] Vector visualization (t-SNE/UMAP for pattern embeddings)
+- [ ] Export functionality (CSV/JSON for patterns and analytics)
+- [ ] User authentication (JWT-based admin auth)
+- [ ] Rate limiting middleware for API endpoints
+- [ ] Audit logging for destructive operations
 - [ ] Mobile responsive improvements
+- [ ] Test suite (unit, integration, E2E)
 
 ### Technical Debt
 - Add comprehensive test coverage
@@ -523,7 +571,7 @@ docker exec -it kato-dashboard-backend python -c "from app.db.mongodb import get
 
 ### Backend Key Dependencies
 - `fastapi` - Web framework
-- `motor` - Async MongoDB client
+- `motor` - Async ClickHouse client
 - `qdrant-client` - Vector database client
 - `redis` - Redis client
 - `httpx` - Async HTTP client

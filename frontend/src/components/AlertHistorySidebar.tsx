@@ -6,7 +6,8 @@
  */
 import { useState, useMemo } from 'react'
 import { X, AlertTriangle, Info, XCircle, Filter, Trash2, CheckCircle } from 'lucide-react'
-import { StoredAlert, SystemAlert } from '../lib/websocket'
+import { SystemAlert } from '../lib/websocket'
+import { StoredAlert } from '../hooks/useWebSocket'
 import { useAlertSidebar } from '../contexts/AlertContext'
 
 interface AlertHistorySidebarProps {
@@ -34,10 +35,10 @@ export function AlertHistorySidebar({
     return alerts.filter(alert => {
       // Check if any alert in the message matches filters
       const matchesSeverity = severityFilter === 'all' ||
-        alert.alerts.some(a => a.level === severityFilter)
+        alert.alerts.some((a: SystemAlert) => a.level === severityFilter)
 
       const matchesType = typeFilter === 'all' ||
-        alert.alerts.some(a => a.type === typeFilter)
+        alert.alerts.some((a: SystemAlert) => a.type === typeFilter)
 
       return matchesSeverity && matchesType
     })
