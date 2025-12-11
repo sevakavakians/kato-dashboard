@@ -687,4 +687,128 @@ docker-compose restart dashboard-backend
 
 ---
 
-Last updated: 2025-10-11
+## ADR-016: Phase 4 Prioritization - INTER-Node Hierarchical Graph First
+
+**Date**: 2025-12-09
+**Status**: Accepted
+**Confidence**: High
+
+### Context
+Dashboard v2.0 roadmap includes 6 major phases after Pattern Editing (Phase 1):
+- Phase 2: Vector Visualization (t-SNE/UMAP embeddings)
+- Phase 3: INTRA-Node Graph Analysis (symbol co-occurrence within a KB)
+- Phase 4: INTER-Node Hierarchical Graph (cross-KB pattern-symbol connections)
+- Phase 5: Export Functionality
+- Phase 6: Testing Infrastructure
+
+User needs to decide implementation priority to maximize value delivery.
+
+### Decision
+Skip directly to Phase 4 (INTER-Node Hierarchical Graph) and defer Phases 2 and 3 for later implementation.
+
+### Rationale
+**Strategic Value**:
+- Phase 4 visualizes the CORE INSIGHT of KATO's hierarchical learning architecture
+- Shows how pattern names from lower nodes become symbols in higher nodes
+- Reveals the abstraction flow: Tokens → node0 → node1 → node2 → node3
+- Most impactful feature for understanding KATO's unique learning mechanism
+
+**Architectural Hierarchy**:
+```
+node0 patterns → become symbols in node1
+node1 patterns → become symbols in node2
+node2 patterns → become symbols in node3
+
+Semantic Levels:
+node0: phrases
+node1: sentences
+node2: paragraphs
+node3: documents
+```
+
+**User Priority**:
+- User explicitly requested hierarchical visualization first
+- Other features are valuable but secondary to understanding abstraction flow
+- Phase 4 provides bird's-eye view of entire system architecture
+
+**Development Efficiency**:
+- Phase 4 is self-contained (doesn't depend on Phases 2 or 3)
+- Can be built in parallel with backend pattern-symbol matching logic
+- Estimated 9-12 hours total implementation time
+- Frontend graph visualization (D3.js/react-force-graph) is well-documented
+
+### Alternatives Considered
+**Option A: Sequential Order (2 → 3 → 4)**
+- Pros: Methodical, builds features layer by layer
+- Cons: Delays most impactful feature, user waits longer for key insight
+- Rejected: Not aligned with user's immediate need
+
+**Option B: All Three in Parallel**
+- Pros: Maximum feature delivery speed
+- Cons: Context switching overhead, harder to maintain focus
+- Rejected: Increases complexity, potential for bugs
+
+**Option C: Phase 4 First (SELECTED)**
+- Pros: Delivers highest-value feature immediately, clear focus
+- Cons: Defers useful features (vector viz, intra-node analysis)
+- Selected: Aligns with user priority, maximizes impact/effort ratio
+
+### Implementation Plan
+
+**Phase 4: INTER-Node Hierarchical Graph (Current Focus)**
+- Timeline: 9-12 hours
+- Backend: Pattern-symbol matching algorithm, 3 new API endpoints
+- Frontend: Force-directed graph visualization, interactive nodes/edges
+- Key Insight: Visualize abstraction hierarchy across all nodes
+
+**Phase 2: Vector Visualization (Deferred)**
+- Timeline: 12-15 hours (when resumed)
+- Backend: t-SNE/UMAP computation, embedding endpoints
+- Frontend: 2D/3D scatter plots, dimensionality reduction controls
+- Integration: Can color embeddings by hierarchy level (Phase 4 data)
+
+**Phase 3: INTRA-Node Graph Analysis (Deferred)**
+- Timeline: 10-12 hours (when resumed)
+- Backend: Co-occurrence analysis, sequential relationship detection
+- Frontend: Network graph within single KB, pattern relationships
+- Integration: Drills into individual KB details from Phase 4 overview
+
+### Consequences
+- Positive: User gets most valuable feature first, clear development path
+- Negative: Useful features (vector viz, intra-node analysis) delayed
+- Trade-offs: Immediate high-impact delivery vs. comprehensive feature set
+
+### Documentation Requirements
+Created three planning documents:
+1. `phase2-vector-visualization-deferred.md` - Full requirements captured
+2. `phase3-intra-node-graph-deferred.md` - Full requirements captured
+3. `phase4-hierarchical-graph-active.md` - Active development plan
+
+### Success Metrics (Phase 4)
+- Users can visualize complete abstraction hierarchy
+- Graph shows all knowledgebases (node0, node1, node2, node3)
+- Edge weights represent pattern-symbol connection counts
+- Interactive features: click nodes/edges, search, filter, export
+- Performance: Handles millions of patterns via sampling/pagination
+
+### Future Integration
+**Phase 2 Enhancement**: Vector visualization can show embeddings colored by hierarchy level (uses Phase 4 classification data)
+
+**Phase 3 Enhancement**: INTRA-node graphs provide drill-down from Phase 4 overview (click node in hierarchy → explore internal relationships)
+
+**Unified Experience**: Phase 4 provides high-level architecture view, Phases 2-3 provide detailed analysis tools
+
+### Rollback Plan
+If Phase 4 reveals unexpected complexity:
+1. Pause and reassess scope
+2. Option to switch to Phase 2 or 3 if simpler
+3. All requirements documented for easy context switch
+
+### Related Decisions
+- Follows Pattern Editing Phase 1 (ADR not created yet)
+- Sets precedent for value-driven prioritization
+- Establishes graph visualization patterns for future features
+
+---
+
+Last updated: 2025-12-09

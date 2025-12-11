@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import {  Database, Search, Trash2, AlertCircle, ChevronRight, RefreshCw, CheckSquare, Square, Trash } from 'lucide-react'
+import {  Database, Search, Trash2, AlertCircle, ChevronRight, RefreshCw, CheckSquare, Square, Trash, Edit, Save, X } from 'lucide-react'
 import { apiClient } from '../lib/api'
 import SymbolsBrowser from '../components/SymbolsBrowser'
 
@@ -703,6 +703,12 @@ interface PatternDetailModalProps {
 }
 
 function PatternDetailModal({ pattern, onClose, onDelete, processorId }: PatternDetailModalProps) {
+  const queryClient = useQueryClient()
+  const [isEditing, setIsEditing] = useState(false)
+  const [editedFrequency, setEditedFrequency] = useState<string>('')
+  const [editedEmotives, setEditedEmotives] = useState<string>('')
+  const [editedMetadata, setEditedMetadata] = useState<string>('')
+
   // Fetch full pattern details (with emotives and metadata from Redis)
   const { data: fullPattern, isLoading, error, refetch } = useQuery({
     queryKey: ['hybridPatternDetail', processorId, pattern.name],
@@ -711,6 +717,73 @@ function PatternDetailModal({ pattern, onClose, onDelete, processorId }: Pattern
 
   // Use fetched pattern if available, otherwise fall back to prop pattern
   const displayPattern = fullPattern || pattern
+
+  // Update mutation
+  const updateMutation = useMutation({
+    mutationFn: async (updates: { frequency?: number; emotives?: any; metadata?: any }) => {
+      return await apiClient.updateHybridPattern(processorId, pattern.name, updates)
+    },
+    onSuccess: () => {
+      // Invalidate queries to refetch updated data
+      queryClient.invalidateQueries({ queryKey: ['hybridPatternDetail', processorId, pattern.name] })
+      queryClient.invalidateQueries({ queryKey: ['hybridPatterns', processorId] })
+      setIsEditing(false)
+      alert('Pattern updated successfully!')
+    },
+    onError: (error: any) => {
+      alert(`Failed to update pattern: ${error.response?.data?.detail || error.message}`)
+    },
+  })
+
+  // Initialize edit form when entering edit mode
+  const handleStartEdit = () => {
+    setEditedFrequency(displayPattern.frequency?.toString() || '0')
+    setEditedEmotives(JSON.stringify(displayPattern.emotives || {}, null, 2))
+    setEditedMetadata(JSON.stringify(displayPattern.metadata || {}, null, 2))
+    setIsEditing(true)
+  }
+
+  const handleCancelEdit = () => {
+    setIsEditing(false)
+  }
+
+  const handleSave = () => {
+    try {
+      // Validate and parse inputs
+      const frequency = parseInt(editedFrequency, 10)
+      if (isNaN(frequency) || frequency < 0) {
+        alert('Frequency must be a non-negative integer')
+        return
+      }
+
+      let emotives: any = {}
+      try {
+        emotives = JSON.parse(editedEmotives)
+        if (typeof emotives !== 'object' || Array.isArray(emotives)) {
+          throw new Error('Emotives must be an object')
+        }
+      } catch (e) {
+        alert('Invalid emotives JSON format')
+        return
+      }
+
+      let metadata: any = {}
+      try {
+        metadata = JSON.parse(editedMetadata)
+        if (typeof metadata !== 'object' || Array.isArray(metadata)) {
+          throw new Error('Metadata must be an object')
+        }
+      } catch (e) {
+        alert('Invalid metadata JSON format')
+        return
+      }
+
+      // Perform update
+      updateMutation.mutate({ frequency, emotives, metadata })
+    } catch (error: any) {
+      alert(`Validation error: ${error.message}`)
+    }
+  }
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -815,19 +888,29 @@ function PatternDetailModal({ pattern, onClose, onDelete, processorId }: Pattern
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
-                  Frequency
+                  Frequency {isEditing && <span className="text-xs text-blue-500">(editable)</span>}
                 </label>
-                <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3">
-                  <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                    {displayPattern.frequency}
-                  </p>
-                </div>
+                {isEditing ? (
+                  <input
+                    type="number"
+                    min="0"
+                    value={editedFrequency}
+                    onChange={(e) => setEditedFrequency(e.target.value)}
+                    className="w-full bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 text-2xl font-bold text-blue-600 dark:text-blue-400 border-2 border-blue-300 dark:border-blue-700 focus:outline-none focus:border-blue-500"
+                  />
+                ) : (
+                  <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3">
+                    <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                      {displayPattern.frequency}
+                    </p>
+                  </div>
+                )}
               </div>
 
               {displayPattern.length !== undefined && (
                 <div>
                   <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
-                    Length
+                    Length <span className="text-xs text-gray-500">(immutable)</span>
                   </label>
                   <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-3">
                     <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">
@@ -839,30 +922,50 @@ function PatternDetailModal({ pattern, onClose, onDelete, processorId }: Pattern
             </div>
 
             {/* Emotives */}
-            {displayPattern.emotives && Object.keys(displayPattern.emotives).length > 0 && (
+            {(isEditing || (displayPattern.emotives && Object.keys(displayPattern.emotives).length > 0)) && (
               <div>
                 <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
-                  Emotives
+                  Emotives {isEditing && <span className="text-xs text-blue-500">(editable JSON)</span>}
                 </label>
-                <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3">
-                  <pre className="text-xs text-gray-900 dark:text-white overflow-auto">
-                    {JSON.stringify(displayPattern.emotives, null, 2)}
-                  </pre>
-                </div>
+                {isEditing ? (
+                  <textarea
+                    value={editedEmotives}
+                    onChange={(e) => setEditedEmotives(e.target.value)}
+                    rows={6}
+                    className="w-full bg-gray-50 dark:bg-gray-900 rounded-lg p-3 text-xs text-gray-900 dark:text-white font-mono border-2 border-blue-300 dark:border-blue-700 focus:outline-none focus:border-blue-500"
+                    placeholder='{"emotion_name": [0.5, 0.6]}'
+                  />
+                ) : (
+                  <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3">
+                    <pre className="text-xs text-gray-900 dark:text-white overflow-auto">
+                      {JSON.stringify(displayPattern.emotives, null, 2)}
+                    </pre>
+                  </div>
+                )}
               </div>
             )}
 
             {/* Metadata (arbitrary training data fields) */}
-            {displayPattern.metadata && Object.keys(displayPattern.metadata).length > 0 && (
+            {(isEditing || (displayPattern.metadata && Object.keys(displayPattern.metadata).length > 0)) && (
               <div>
                 <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
-                  Metadata
+                  Metadata {isEditing && <span className="text-xs text-blue-500">(editable JSON)</span>}
                 </label>
-                <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 max-h-64 overflow-y-auto">
-                  <pre className="text-xs text-gray-900 dark:text-white">
-                    {JSON.stringify(displayPattern.metadata, null, 2)}
-                  </pre>
-                </div>
+                {isEditing ? (
+                  <textarea
+                    value={editedMetadata}
+                    onChange={(e) => setEditedMetadata(e.target.value)}
+                    rows={8}
+                    className="w-full bg-gray-50 dark:bg-gray-900 rounded-lg p-3 text-xs text-gray-900 dark:text-white font-mono border-2 border-blue-300 dark:border-blue-700 focus:outline-none focus:border-blue-500"
+                    placeholder='{"key": "value"}'
+                  />
+                ) : (
+                  <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 max-h-64 overflow-y-auto">
+                    <pre className="text-xs text-gray-900 dark:text-white">
+                      {JSON.stringify(displayPattern.metadata, null, 2)}
+                    </pre>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -871,22 +974,52 @@ function PatternDetailModal({ pattern, onClose, onDelete, processorId }: Pattern
         {/* Actions */}
         {!isLoading && !error && (
           <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex gap-3">
-            <button
-              onClick={() => {
-                onDelete(pattern.name)
-                onClose()
-              }}
-              className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
-            >
-              <Trash2 className="w-4 h-4" />
-              Delete Pattern
-            </button>
-            <button
-              onClick={onClose}
-              className="flex-1 px-4 py-2 bg-gray-300 dark:bg-gray-600 text-gray-900 dark:text-white rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors"
-            >
-              Close
-            </button>
+            {isEditing ? (
+              <>
+                <button
+                  onClick={handleSave}
+                  disabled={updateMutation.isPending}
+                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-green-400 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                >
+                  <Save className="w-4 h-4" />
+                  {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
+                </button>
+                <button
+                  onClick={handleCancelEdit}
+                  disabled={updateMutation.isPending}
+                  className="flex-1 px-4 py-2 bg-gray-300 dark:bg-gray-600 text-gray-900 dark:text-white rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+                >
+                  <X className="w-4 h-4" />
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={handleStartEdit}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+                >
+                  <Edit className="w-4 h-4" />
+                  Edit Pattern
+                </button>
+                <button
+                  onClick={() => {
+                    onDelete(pattern.name)
+                    onClose()
+                  }}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Delete
+                </button>
+                <button
+                  onClick={onClose}
+                  className="flex-1 px-4 py-2 bg-gray-300 dark:bg-gray-600 text-gray-900 dark:text-white rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors"
+                >
+                  Close
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>

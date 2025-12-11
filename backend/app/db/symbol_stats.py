@@ -301,3 +301,37 @@ async def get_symbol_statistics(kb_id: str) -> Dict[str, Any]:
             'avg_pattern_member_frequency': 0,
             'error': str(e)
         }
+
+
+async def get_all_symbols(kb_id: str) -> Dict[str, Dict[str, Any]]:
+    """
+    Get all symbols for a knowledgebase as a dictionary mapping symbol name to data.
+
+    This is used for hierarchical analysis to find which pattern names from
+    lower nodes appear as symbols in higher nodes.
+
+    Args:
+        kb_id: Knowledge base identifier
+
+    Returns:
+        Dictionary: {symbol_name: {frequency: int, pmf: float, ratio: float}}
+    """
+    try:
+        symbols_list = await _load_all_symbols(kb_id)
+
+        # Convert list to dictionary mapping symbol name to data
+        symbols_dict = {}
+        for symbol in symbols_list:
+            symbol_name = symbol.get('name')
+            if symbol_name:
+                symbols_dict[symbol_name] = {
+                    'frequency': symbol.get('frequency', 0),
+                    'pmf': symbol.get('pattern_member_frequency', 0),
+                    'ratio': symbol.get('ratio', 0.0)
+                }
+
+        return symbols_dict
+
+    except Exception as e:
+        logger.error(f"Failed to get all symbols for {kb_id}: {e}")
+        return {}

@@ -6,6 +6,7 @@ import SessionDetail from './pages/SessionDetail'
 import Databases from './pages/Databases'
 import VectorBrowser from './pages/VectorBrowser'
 import Analytics from './pages/Analytics'
+import HierarchicalGraph from './pages/HierarchicalGraph'
 import NotFound from './pages/NotFound'
 
 function App() {
@@ -19,6 +20,7 @@ function App() {
           <Route path="databases" element={<Databases />} />
           <Route path="vectors" element={<VectorBrowser />} />
           <Route path="analytics" element={<Analytics />} />
+          <Route path="hierarchy" element={<HierarchicalGraph />} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>

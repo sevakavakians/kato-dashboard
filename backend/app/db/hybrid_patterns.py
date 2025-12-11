@@ -309,10 +309,16 @@ async def update_pattern_hybrid(
         if 'frequency' in updates:
             await redis_client.set_pattern_frequency(kb_id, pattern_name, updates['frequency'])
 
+        if 'emotives' in updates:
+            await redis_client.set_pattern_emotives(kb_id, pattern_name, updates['emotives'])
+
+        if 'metadata' in updates:
+            await redis_client.set_pattern_metadata(kb_id, pattern_name, updates['metadata'])
+
         # Note: ClickHouse updates intentionally not implemented
         # ClickHouse ALTER TABLE UPDATE is slow and blocking for large tables
         # Pattern core data (pattern_data, length, token_count) is immutable by design
-        # Only Redis metadata (frequency, emotives) can be updated
+        # Only Redis metadata (frequency, emotives, metadata) can be updated
         # If pattern data needs to change, delete and recreate the pattern
 
         logger.info(f"Updated pattern {pattern_name} in hybrid architecture")

@@ -389,6 +389,90 @@ async def set_pattern_frequency(kb_id: str, pattern_name: str, frequency: int) -
         return False
 
 
+async def set_pattern_emotives(kb_id: str, pattern_name: str, emotives: Dict[str, Any]) -> bool:
+    """
+    Set emotives hash for a pattern in Redis (if not in read-only mode).
+
+    Redis key format: {kb_id}:emotives:{pattern_name}
+    Values are JSON-serialized arrays stored as hash fields.
+
+    Args:
+        kb_id: Knowledge base identifier
+        pattern_name: Pattern hash/name
+        emotives: Dictionary of emotives (e.g., {'joy': [0.5, 0.6], 'anger': [0.1]})
+
+    Returns:
+        True if set successfully, False otherwise
+    """
+    settings = get_settings()
+    if settings.database_read_only:
+        logger.warning("Redis is in read-only mode, set emotives rejected")
+        return False
+
+    client = await get_redis_client()
+
+    key = f"{kb_id}:emotives:{pattern_name}"
+
+    try:
+        import json
+        # Delete existing hash first
+        await client.delete(key)
+
+        # Set new emotives
+        if emotives:
+            # Serialize values to JSON
+            emotives_serialized = {k: json.dumps(v) for k, v in emotives.items()}
+            await client.hset(key, mapping=emotives_serialized)
+
+        logger.info(f"Set emotives for {pattern_name}: {len(emotives)} fields")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to set emotives for {pattern_name}: {e}")
+        return False
+
+
+async def set_pattern_metadata(kb_id: str, pattern_name: str, metadata: Dict[str, Any]) -> bool:
+    """
+    Set metadata hash for a pattern in Redis (if not in read-only mode).
+
+    Redis key format: {kb_id}:metadata:{pattern_name}
+    Values are JSON-serialized data stored as hash fields.
+
+    Args:
+        kb_id: Knowledge base identifier
+        pattern_name: Pattern hash/name
+        metadata: Dictionary of metadata fields
+
+    Returns:
+        True if set successfully, False otherwise
+    """
+    settings = get_settings()
+    if settings.database_read_only:
+        logger.warning("Redis is in read-only mode, set metadata rejected")
+        return False
+
+    client = await get_redis_client()
+
+    key = f"{kb_id}:metadata:{pattern_name}"
+
+    try:
+        import json
+        # Delete existing hash first
+        await client.delete(key)
+
+        # Set new metadata
+        if metadata:
+            # Serialize values to JSON
+            metadata_serialized = {k: json.dumps(v) for k, v in metadata.items()}
+            await client.hset(key, mapping=metadata_serialized)
+
+        logger.info(f"Set metadata for {pattern_name}: {len(metadata)} fields")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to set metadata for {pattern_name}: {e}")
+        return False
+
+
 async def delete_pattern_metadata(kb_id: str, pattern_name: str) -> bool:
     """
     Delete all Redis metadata for a pattern (frequency, emotives, metadata).

@@ -748,6 +748,228 @@ async def get_comprehensive_analytics(
 
 
 # ============================================================================
+# Hierarchical Graph Analytics (KATO Abstraction Hierarchy)
+# ============================================================================
+
+
+@router.get("/analytics/graphs/hierarchy")
+async def get_hierarchy_graph():
+    """
+    Get the complete hierarchical graph showing connections between knowledgebases.
+
+    This endpoint analyzes how pattern names from lower-level nodes (e.g., node0)
+    become symbols in higher-level nodes (e.g., node1, node2, node3), revealing
+    the abstraction hierarchy in KATO's learning architecture.
+
+    Returns:
+        {
+            'nodes': [
+                {
+                    'id': 'node0_kato',
+                    'level': 0,
+                    'pattern_count': 1234567,
+                    'label': 'node0 (Phrases)'
+                },
+                ...
+            ],
+            'edges': [
+                {
+                    'from': 'node0_kato',
+                    'to': 'node1_kato',
+                    'connection_count': 8523,
+                    'coverage_source': 0.68,
+                    'coverage_target': 0.42,
+                    'label': '8,523 connections'
+                },
+                ...
+            ],
+            'statistics': {
+                'total_nodes': 4,
+                'total_edges': 3,
+                'total_connections': 25647,
+                'hierarchy_depth': 3
+            }
+        }
+
+    Use Cases:
+        - Visualize the abstraction hierarchy (phrases → sentences → paragraphs → documents)
+        - Understand pattern reuse across hierarchy levels
+        - Identify bottlenecks in hierarchical learning
+    """
+    try:
+        from app.services.hierarchy_analysis import compute_hierarchy_graph
+        result = await compute_hierarchy_graph()
+        return result
+    except Exception as e:
+        logger.error(f"Failed to compute hierarchy graph: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/analytics/graphs/hierarchy/{kb_id_from}/to/{kb_id_to}")
+async def get_hierarchy_connection_details(
+    kb_id_from: str,
+    kb_id_to: str,
+    sample_limit: int = Query(50, ge=1, le=1000)
+):
+    """
+    Get detailed connection information between two knowledgebases.
+
+    Args:
+        kb_id_from: Source knowledgebase (e.g., 'node0_kato')
+        kb_id_to: Target knowledgebase (e.g., 'node1_kato')
+        sample_limit: Number of sample connections to return (default: 50)
+
+    Returns:
+        {
+            'source_kb': 'node0_kato',
+            'target_kb': 'node1_kato',
+            'connection_count': 8523,
+            'coverage_source': 0.68,
+            'coverage_target': 0.42,
+            'sample_connections': [
+                {
+                    'pattern_name': 'PTRN|abc123...',
+                    'frequency_in_source': 42,
+                    'frequency_in_target': 15
+                },
+                ...
+            ]
+        }
+
+    Use Cases:
+        - Click on an edge in the hierarchy graph to see connection details
+        - Understand which patterns are promoted between levels
+        - Analyze pattern frequency changes across hierarchy
+    """
+    try:
+        from app.services.hierarchy_analysis import get_connection_details
+        result = await get_connection_details(kb_id_from, kb_id_to, sample_limit)
+        return result
+    except Exception as e:
+        logger.error(f"Failed to get connection details {kb_id_from} → {kb_id_to}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/analytics/graphs/hierarchy/patterns/trace/{pattern_name}")
+async def trace_pattern_composition_graph(
+    pattern_name: str,
+    kb_id: Optional[str] = Query(None, description="Knowledge base ID (auto-detected if not provided)"),
+    max_depth: int = Query(2, ge=1, le=5, description="Maximum tracing depth in each direction")
+):
+    """
+    Trace a pattern's compositional graph showing what it's made of and what uses it.
+
+    This endpoint returns individual patterns as nodes and their compositional relationships
+    as edges. For a given pattern, it traces:
+    - Backward (ancestors): What patterns is this composed of?
+    - Forward (descendants): What patterns use this pattern?
+
+    Args:
+        pattern_name: Pattern name (hash without PTRN| prefix)
+        kb_id: Knowledge base ID (optional, will be auto-detected)
+        max_depth: Maximum depth to trace (1-5, default: 2)
+
+    Returns:
+        {
+            'nodes': [
+                {
+                    'id': 'node0_kato:abc123...',
+                    'pattern_name': 'abc123...',
+                    'kb_id': 'node0_kato',
+                    'level': 0,
+                    'length': 7,
+                    'frequency': 42,
+                    'label': 'PTRN|abc1...',
+                    'pattern_data': [["Ġthe"], ["Ġcat"], ...]
+                },
+                ...
+            ],
+            'edges': [
+                {
+                    'source': 'node0_kato:abc123...',
+                    'target': 'node1_kato:def456...',
+                    'position': 0,
+                    'label': 'pos 0'
+                },
+                ...
+            ],
+            'statistics': {
+                'total_nodes': 25,
+                'total_edges': 24,
+                'origin_pattern': pattern_name,
+                'origin_kb': kb_id
+            }
+        }
+
+    Example:
+        GET /analytics/graphs/hierarchy/patterns/trace/542bfbb8a72168becb55fdaa50862a5f0a937b75?max_depth=2
+    """
+    try:
+        from app.services.hierarchy_analysis import trace_pattern_graph
+
+        result = await trace_pattern_graph(
+            pattern_name=pattern_name,
+            kb_id=kb_id,
+            max_depth=max_depth
+        )
+
+        return result
+
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to trace pattern graph for {pattern_name}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/analytics/graphs/hierarchy/patterns/{pattern_name}/path")
+async def get_pattern_promotion_path(pattern_name: str):
+    """
+    Trace a pattern's promotion path through the hierarchy.
+
+    Given a pattern name, find where it appears as a pattern in lower levels
+    and where it's used as a symbol in higher levels.
+
+    Args:
+        pattern_name: Pattern name to trace (e.g., 'PTRN|abc123...')
+
+    Returns:
+        {
+            'pattern_name': 'PTRN|abc123...',
+            'origin_kb': 'node0_kato',
+            'path': [
+                {
+                    'level': 0,
+                    'kb_id': 'node0_kato',
+                    'role': 'pattern',
+                    'frequency': 42
+                },
+                {
+                    'level': 1,
+                    'kb_id': 'node1_kato',
+                    'role': 'symbol',
+                    'frequency': 15
+                },
+                ...
+            ],
+            'max_level_reached': 2
+        }
+
+    Use Cases:
+        - Trace how a low-level pattern contributes to high-level abstractions
+        - Understand pattern reuse across the hierarchy
+        - Debug hierarchical learning behavior
+    """
+    try:
+        from app.services.hierarchy_analysis import get_pattern_promotion_path
+        result = await get_pattern_promotion_path(pattern_name)
+        return result
+    except Exception as e:
+        logger.error(f"Failed to trace pattern promotion path for {pattern_name}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
 # Hybrid Pattern Endpoints (ClickHouse + Redis)
 # ============================================================================
 
@@ -827,6 +1049,90 @@ async def get_pattern_detail(kb_id: str, pattern_name: str):
         raise
     except Exception as e:
         logger.error(f"Failed to get pattern {pattern_name}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/databases/patterns/{kb_id}/patterns/{pattern_name}")
+async def update_pattern(kb_id: str, pattern_name: str, request: Dict[str, Any]):
+    """
+    Update pattern metadata in hybrid architecture (if not in read-only mode).
+
+    Updates are applied to Redis only (frequency, emotives, metadata).
+    ClickHouse pattern data (pattern_data, length, token_count) is immutable.
+
+    Args:
+        kb_id: Knowledge base identifier
+        pattern_name: Pattern hash/name to update
+        request: Dictionary with fields to update
+            {
+                "frequency": int (optional),
+                "emotives": {...} (optional),
+                "metadata": {...} (optional)
+            }
+
+    Returns:
+        Updated pattern object with new metadata
+    """
+    try:
+        from app.db.hybrid_patterns import update_pattern_hybrid, get_pattern_by_id_hybrid
+
+        # Validate pattern exists
+        existing_pattern = await get_pattern_by_id_hybrid(kb_id, pattern_name)
+        if not existing_pattern:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Pattern {pattern_name} not found in {kb_id}"
+            )
+
+        # Extract updates
+        updates = {}
+        if 'frequency' in request:
+            if not isinstance(request['frequency'], int) or request['frequency'] < 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Frequency must be a non-negative integer"
+                )
+            updates['frequency'] = request['frequency']
+
+        if 'emotives' in request:
+            if not isinstance(request['emotives'], dict):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Emotives must be a dictionary"
+                )
+            updates['emotives'] = request['emotives']
+
+        if 'metadata' in request:
+            if not isinstance(request['metadata'], dict):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Metadata must be a dictionary"
+                )
+            updates['metadata'] = request['metadata']
+
+        if not updates:
+            raise HTTPException(
+                status_code=400,
+                detail="No valid fields to update (frequency, emotives, metadata)"
+            )
+
+        # Perform update
+        success = await update_pattern_hybrid(kb_id, pattern_name, updates)
+
+        if not success:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to update pattern (check read-only mode)"
+            )
+
+        # Return updated pattern
+        updated_pattern = await get_pattern_by_id_hybrid(kb_id, pattern_name)
+        return updated_pattern
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update pattern {pattern_name}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

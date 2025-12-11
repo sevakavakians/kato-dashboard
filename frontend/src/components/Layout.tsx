@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from 'react-router-dom'
-import { Activity, Database, BarChart3, Users, Box, Wifi, WifiOff, Bell } from 'lucide-react'
+import { Activity, Database, BarChart3, Users, Box, Wifi, WifiOff, Bell, Network } from 'lucide-react'
 import { useWebSocket, useWebSocketStatus } from '../hooks/useWebSocket'
 import { AlertProvider, useAlertSidebar } from '../contexts/AlertContext'
 import AlertHistorySidebar from './AlertHistorySidebar'
@@ -21,6 +21,7 @@ function LayoutContent() {
     { name: 'Databases', href: '/databases', icon: Database },
     { name: 'Vectors', href: '/vectors', icon: Box },
     { name: 'Analytics', href: '/analytics', icon: BarChart3 },
+    { name: 'Hierarchy', href: '/hierarchy', icon: Network },
   ]
 
   const getStatusColor = () => {

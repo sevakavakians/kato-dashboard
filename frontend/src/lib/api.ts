@@ -363,6 +363,22 @@ class APIClient {
     return data
   }
 
+  async updateHybridPattern(
+    kbId: string,
+    patternName: string,
+    updates: {
+      frequency?: number
+      emotives?: Record<string, any>
+      metadata?: Record<string, any>
+    }
+  ) {
+    const { data } = await this.client.put(
+      `/databases/patterns/${kbId}/patterns/${patternName}`,
+      updates
+    )
+    return data
+  }
+
   async getHybridPatternStatistics(kbId: string) {
     const { data } = await this.client.get(
       `/databases/patterns/${kbId}/statistics`
@@ -425,6 +441,50 @@ class APIClient {
 
   async getSymbolStatistics(kbId: string) {
     const { data } = await this.client.get(`/databases/symbols/${kbId}/statistics`)
+    return data
+  }
+
+  // Hierarchical Graph Analytics
+  async getHierarchyGraph() {
+    const { data } = await this.client.get('/analytics/graphs/hierarchy')
+    return data
+  }
+
+  async getHierarchyConnectionDetails(
+    kbIdFrom: string,
+    kbIdTo: string,
+    sampleLimit = 50
+  ) {
+    const { data } = await this.client.get(
+      `/analytics/graphs/hierarchy/${kbIdFrom}/to/${kbIdTo}`,
+      {
+        params: { sample_limit: sampleLimit }
+      }
+    )
+    return data
+  }
+
+  async getPatternPromotionPath(patternName: string) {
+    const { data } = await this.client.get(
+      `/analytics/graphs/hierarchy/patterns/${encodeURIComponent(patternName)}/path`
+    )
+    return data
+  }
+
+  async tracePatternGraph(
+    patternName: string,
+    kbId?: string,
+    maxDepth: number = 2
+  ) {
+    const { data } = await this.client.get(
+      `/analytics/graphs/hierarchy/patterns/trace/${encodeURIComponent(patternName)}`,
+      {
+        params: {
+          kb_id: kbId,
+          max_depth: maxDepth
+        }
+      }
+    )
     return data
   }
 }

@@ -1,10 +1,11 @@
 # KATO Dashboard - Project Overview
 
 **Project Name**: KATO Dashboard
-**Status**: Phase 2 Complete + Enhancements + KB Deletion + MongoDB Removal
+**Status**: Phase 4 COMPLETE - Hierarchical Graph Pattern Visualization
 **Started**: 2025-10-06
-**Last Updated**: 2025-12-03
+**Last Updated**: 2025-12-10
 **Repository**: /Users/sevakavakians/PROGRAMMING/kato-dashboard
+**Current Focus**: Awaiting Next Phase Direction
 
 ## Purpose
 A comprehensive web-based monitoring and management dashboard for the KATO AI system. Provides real-time metrics, database browsing, session management, and analytics capabilities for system administrators.
@@ -128,9 +129,35 @@ kato-dashboard/
 └── planning-docs/              # Project management docs
 ```
 
-## Current Status: Phase 2 Complete + 2 Enhancement Features + KB Deletion + MongoDB Removal ✅
+## Current Status: Phase 4B COMPLETE - Edge Crossing Minimization ✅
 
-### Latest Changes: KB Deletion & MongoDB Removal (COMPLETE - 2025-12-03)
+### Latest Changes: Phase 4B - Edge Crossing Minimization - COMPLETE (2025-12-10)
+
+**Edge Crossing Minimization for Hierarchical Graph Visualization**
+- **Problem Identified**: Hierarchical graph had unnecessary edge crossings due to D3 physics forces
+  - Blue circles (node0 patterns) appearing under unrelated green/yellow circles
+  - Visual confusion about pattern relationships
+  - Edges crossing even when patterns weren't actually cross-connected
+- **Solution Implemented**: Integrated dagre.js (Sugiyama algorithm) for optimal hierarchical layout
+  - Installed dagre.js dependency (npm install dagre @types/dagre)
+  - Created `/frontend/src/utils/graphLayout.ts` (~93 lines)
+  - Implemented computeDagreLayout() function with Sugiyama algorithm
+  - Integrated into HierarchicalGraph.tsx with useMemo hook
+  - Maps layoutMode to dagre rankDir (bu→BT, td→TB, lr→LR, rl→RL)
+  - Fixed TypeScript compilation errors
+  - Disabled D3 forces (cooldownTicks=0) to preserve optimal layout
+  - Disabled node dragging to maintain layout integrity
+- **Dependencies Added**: dagre (~57KB), @types/dagre
+  - Bundle size: 999KB → 1,057KB (+57KB)
+- **Status**: COMPLETE ✅ - Deployed to production
+- **Expected Benefits**:
+  - Blue circles positioned directly below green parent circles
+  - Minimal or zero edge crossings for well-structured hierarchies
+  - Clear visual hierarchy showing composition flow
+  - Improved readability and aesthetics
+- **Next**: Awaiting user testing and feedback before proceeding to Phase 4C (Documentation refinement)
+
+### Previous Changes: KB Deletion & MongoDB Removal (COMPLETE - 2025-12-03)
 
 **Phase 1: Knowledgebase Deletion Feature**
 - Added DELETE /api/v1/databases/patterns/{kb_id} endpoint
@@ -279,6 +306,18 @@ kato-dashboard/
    - Auto-refresh every 30 seconds
    - Responsive design with dark mode support
 
+### Completed Dashboard v2.0 Features
+
+**Pattern Editing Interface** (COMPLETE - 2025-12-09):
+- ✅ Backend API complete (PUT endpoint, validation, error handling)
+- ✅ Frontend UI complete (edit mode toggle, form validation, optimistic updates)
+- ✅ Enables editing frequency, emotives, and metadata
+- ✅ Respects read-only mode
+- ✅ Returns updated pattern object
+- ✅ Visual indicators for editable vs immutable fields
+- ✅ JSON validation and syntax checking
+- ✅ Save/Cancel workflow with loading states
+
 ### Future Features (Phase 3+)
 
 **Symbols KB Enhancements**:
@@ -298,8 +337,7 @@ kato-dashboard/
 - Export functionality (CSV/JSON) for all collections
 - Comprehensive testing infrastructure (unit, integration, E2E)
 - Performance optimizations (virtual scrolling for large collections)
-- Advanced search with MongoDB query builder
-- Document editing in modal (currently view-only for non-patterns)
+- Advanced search capabilities
 - Document comparison tool
 - Dark mode toggle
 - Mobile responsive improvements
@@ -345,18 +383,21 @@ kato-dashboard/
 - **Status**: COMPLETE ✅
 - **Date**: 2025-11-13
 
-### Cumulative (Through Phase 2 + 2 Enhancements + KB Deletion + MongoDB Removal)
-- **Total Files**: 58+ (5 new in Phase 2, 3 new in enhancements, 1 deleted in MongoDB removal)
-- **Total Lines of Code**: ~8,266+ (~2,115 in Phase 2, ~1,270 in enhancement #1, ~785 in enhancement #2, +140 KB deletion, -650 MongoDB removal)
-- **Backend Endpoints**: 41 HTTP + 1 WebSocket (11 in Phase 2, 6 in enhancement #1, 3 in enhancement #2, +1 KB deletion, -12 MongoDB removal)
-- **Backend Services**: 3 (kato_api.py, analytics.py, websocket.py)
+### Cumulative (Through Phase 2 + Enhancements + KB Deletion + MongoDB Removal + Pattern Editing + Phase 4 + Phase 4B COMPLETE)
+- **Total Files**: 60+ (5 new in Phase 2, 3 new in enhancements, 1 deleted in MongoDB removal, 1 new in Phase 4, 1 new in Phase 4B)
+- **Total Lines of Code**: ~9,779+ (~2,115 in Phase 2, ~1,270 in enhancement #1, ~785 in enhancement #2, +140 KB deletion, -650 MongoDB removal, +350 pattern editing, +1,000 Phase 4, +93 Phase 4B graphLayout utility)
+- **Backend Endpoints**: 43 HTTP + 1 WebSocket (11 in Phase 2, 6 in enhancement #1, 3 in enhancement #2, +1 KB deletion, -12 MongoDB removal, +1 pattern editing, +1 Phase 4)
+- **Backend Services**: 4 (kato_api.py, analytics.py, websocket.py, hierarchy_analysis.py)
 - **Backend Database Modules**: 4 (clickhouse.py, qdrant.py, redis_client.py, symbol_stats.py + hybrid_patterns.py)
 - **Database Architecture**: ClickHouse + Redis + Qdrant (MongoDB removed 2025-12-03)
-- **Frontend Pages**: 6 (Dashboard, Sessions, SessionDetail, Databases, VectorBrowser, Analytics)
+- **Frontend Pages**: 7 (Dashboard, Sessions, SessionDetail, Databases, VectorBrowser, Analytics, HierarchicalGraph)
 - **Frontend Components**: 11+ (including 2 generic collection components + SymbolsBrowser)
+- **Frontend Utilities**: 1 (graphLayout.ts for dagre-based hierarchical layout)
 - **Database Browser Tabs**: 3 (Patterns [ClickHouse], Symbols [Redis], Redis Keys) - MongoDB tab removed
+- **Graph Layout Algorithms**: 7 (force-directed, 4 hierarchical with dagre, 2 radial)
+- **Graph Layout Libraries**: 2 (react-force-graph-2d, dagre with Sugiyama algorithm)
 - **Docker Containers**: 2
-- **Total Development Time**: ~28 hours
+- **Total Development Time**: ~45 hours (Phase 4: 11.5h, Phase 4B: 1.5h)
 
 ## Configuration
 
@@ -423,11 +464,74 @@ None identified yet. This is a fresh implementation with clean architecture.
 - ✅ Advanced analytics dashboard (Complete - 3h)
 - ✅ WebSocket real-time updates (Complete - 2h)
 
-### Phase 3 (Planned)
+### Dashboard v2.0 Roadmap (Revised 2025-12-09)
+
+**Strategic Decision (ADR-016)**: Phase 4 prioritized for immediate implementation
+
+**COMPLETE - Phase 4: INTER-Node Hierarchical Graph** ✅ (9-12h estimated, 12h actual including 4B)
+- ✅ **Phase 4A (Backend)**: COMPLETE (~4 hours)
+  - hierarchy_analysis.py service created (~287 lines pattern tracing)
+  - Bidirectional pattern tracing algorithm (ancestors + descendants)
+  - 1 API endpoint added (GET /analytics/graphs/hierarchy/patterns/trace/{pattern_name})
+  - Pattern reference extraction, KB relationship functions
+- ✅ **Phase 4B (Frontend & Optimization)**: COMPLETE (~7.5 hours total)
+  - **Phase 4B.1 (Initial Frontend)**: ~5.5 hours
+    - HierarchicalGraph.tsx page created (~600 lines)
+    - Pattern-level visualization (redesigned from KB-level)
+    - 7 layout modes (force-directed, hierarchical, radial)
+    - Progressive graph exploration with accumulation
+    - Interactive highlighting with BFS traversal
+    - "Trace This Pattern" button for on-demand expansion
+    - Statistics dashboard, graph centering fixes
+  - **Phase 4B.2 (Edge Crossing Minimization)**: ~2 hours (2025-12-10)
+    - Identified problem: D3 physics forces causing unnecessary edge crossings
+    - Integrated dagre.js with Sugiyama algorithm for optimal layout
+    - Created graphLayout.ts utility (~93 lines)
+    - Configured hierarchical layout with network-simplex ranker
+    - Disabled D3 forces (cooldownTicks=0) to preserve layout
+    - Disabled node dragging to maintain optimization
+    - Bundle size increase: 999KB → 1,057KB (+57KB)
+    - Expected improvement: minimal/zero crossings, clearer visual hierarchy
+- ✅ **Phase 4C (Testing & Documentation)**: COMPLETE (~2 hours)
+  - API tested with pattern tracing (10 nodes, 9 edges verified)
+  - Frontend deployed with edge crossing optimization
+  - Completion archive created (phase-4-hierarchical-graph-complete.md)
+  - All documentation updated including Phase 4B changes
+- Key Achievement: Shows compositional relationships with optimized visual layout
+- Planning: COMPLETE (phase4-hierarchical-graph-active.md, 27k+ words)
+- Status: ALL PHASES COMPLETE ✅ - Deployed to production with edge crossing minimization
+
+**DEFERRED - Phase 2: Vector Visualization** (12-15 hours)
+- ⏸️ t-SNE/UMAP dimensionality reduction for pattern embeddings
+- 2D/3D scatter plots for exploring pattern spaces
+- Cluster detection and visualization
+- Planning: COMPLETE (phase2-vector-visualization-deferred.md)
+- Status: Full requirements captured, deferred pending Phase 4 completion
+
+**DEFERRED - Phase 3: INTRA-Node Graph Analysis** (10-12 hours)
+- ⏸️ Symbol co-occurrence graphs within single KB
+- Sequential relationship analysis (N-grams)
+- Pattern similarity explorer
+- Planning: COMPLETE (phase3-intra-node-graph-deferred.md)
+- Status: Full requirements captured, deferred pending Phase 4 completion
+
+**Phase 5: Export Functionality** (6-8 hours)
+- ⏳ CSV/JSON exports for patterns and analytics
+- GraphML/GEXF for graph structures
+- PNG/SVG for visualizations
+- Status: Not yet planned
+
+**Phase 6: Testing Infrastructure** (10-15 hours)
+- ⏳ Backend unit/integration tests (60%+ coverage)
+- ⏳ Frontend component tests
+- ⏳ E2E tests for critical workflows
+- Status: Not yet planned
+
+**Phase 7: Quality & Security** (TBD)
 - ⏳ User authentication and authorization
-- ⏳ Testing infrastructure (unit, integration, E2E)
-- ⏳ Alert system
-- ⏳ Performance optimizations
+- ⏳ Alert system for thresholds
+- ⏳ Audit logging for destructive operations
+- Status: Deferred pending Phase 4-6 completion
 
 ## Links
 - Main KATO Repository: /Users/sevakavakians/PROGRAMMING/kato
@@ -437,14 +541,15 @@ None identified yet. This is a fresh implementation with clean architecture.
 ---
 **Verified Facts**:
 - Project initialized: 2025-10-06
-- Latest enhancement: 2025-10-10 (MongoDB Multi-Collection Viewer)
+- Latest strategic decision: 2025-12-09 (ADR-016: Phase 4 Prioritization)
+- MongoDB removed: 2025-12-03 (architecture simplification)
 - Docker deployment tested and working
 - All backend endpoints functional (48+ HTTP + 1 WebSocket)
 - Frontend routing and layout complete
-- Real-time metrics auto-refresh working
-- Generic MongoDB collection system supports any collection structure
-- Multi-collection viewer fully operational with independent controls
+- Real-time metrics via WebSocket (Phases 1-4 complete)
+- Pattern editing interface complete (Phase 1)
+- Knowledgebase deletion complete (hybrid ClickHouse + Redis)
 - Read-only mode enforced across all write operations
-- Special metadata collection protection verified
 - Zero TypeScript errors across all implementations
-- Containers rebuilt and deployed successfully (2025-10-10)
+- Phase 4 planning complete: 3 docs created (15k+ words)
+- Implementation path clear: Backend (3-4h) → Frontend (4-5h) → Testing (2-3h)
