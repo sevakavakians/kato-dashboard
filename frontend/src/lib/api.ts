@@ -340,7 +340,8 @@ class APIClient {
     skip = 0,
     limit = 100,
     sortBy = 'length',
-    sortOrder = -1
+    sortOrder = -1,
+    includeMetadataFlags = true
   ) {
     const { data } = await this.client.get(
       `/databases/patterns/${kbId}/patterns`,
@@ -350,6 +351,7 @@ class APIClient {
           limit,
           sort_by: sortBy,
           sort_order: sortOrder,
+          include_metadata_flags: includeMetadataFlags,
         },
       }
     )

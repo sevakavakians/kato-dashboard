@@ -277,53 +277,123 @@ async def get_patterns_frequencies_batch(kb_id: str, pattern_names: List[str]) -
         return {name: 0 for name in pattern_names}
 
 
-async def get_pattern_emotives(kb_id: str, pattern_name: str) -> Dict[str, Any]:
+async def check_patterns_metadata_existence_batch(kb_id: str, pattern_names: List[str]) -> Dict[str, Dict[str, bool]]:
     """
-    Get emotives hash for a pattern from Redis.
+    Batch check existence of emotives and metadata for multiple patterns using Redis pipeline.
 
+    Checks if the data is non-empty after parsing JSON, not just if the key exists.
+    KATO stores empty metadata as '{}' and empty emotives as '[]', so we need to
+    actually fetch and parse to determine if there's meaningful data.
+
+    Args:
+        kb_id: Knowledge base identifier
+        pattern_names: List of pattern hashes/names
+
+    Returns:
+        Dictionary mapping pattern_name -> {'has_emotives': bool, 'has_metadata': bool}
+    """
+    if not pattern_names:
+        return {}
+
+    client = await get_redis_client()
+
+    try:
+        import json
+
+        async with client.pipeline(transaction=False) as pipe:
+            for name in pattern_names:
+                pipe.get(f"{kb_id}:emotives:{name}")
+                pipe.get(f"{kb_id}:metadata:{name}")
+
+            results = await pipe.execute()
+
+        # Build dict mapping pattern_name -> existence flags
+        existence = {}
+        for i, name in enumerate(pattern_names):
+            emotives_raw = results[i * 2]      # Every even index
+            metadata_raw = results[i * 2 + 1]  # Every odd index
+
+            # Check if emotives is non-empty after parsing
+            has_emotives = False
+            if emotives_raw:
+                try:
+                    emotives = json.loads(emotives_raw)
+                    has_emotives = bool(emotives and len(emotives) > 0)
+                except json.JSONDecodeError:
+                    has_emotives = False
+
+            # Check if metadata is non-empty after parsing
+            has_metadata = False
+            if metadata_raw:
+                try:
+                    metadata = json.loads(metadata_raw)
+                    has_metadata = bool(metadata and len(metadata) > 0)
+                except json.JSONDecodeError:
+                    has_metadata = False
+
+            existence[name] = {
+                'has_emotives': has_emotives,
+                'has_metadata': has_metadata
+            }
+
+        return existence
+    except Exception as e:
+        logger.error(f"Failed to batch check metadata existence: {e}")
+        # Return empty dict on error
+        return {name: {'has_emotives': False, 'has_metadata': False} for name in pattern_names}
+
+
+async def get_pattern_emotives(kb_id: str, pattern_name: str) -> list[Dict[str, Any]]:
+    """
+    Get emotives list for a pattern from Redis.
+
+    KATO stores emotives as a JSON-encoded list of emotive dicts (rolling window).
     Redis key format: {kb_id}:emotives:{pattern_name}
-    Values are JSON-serialized arrays stored as hash fields.
+    Value format: JSON string like '[{"joy": 0.9}, {"joy": 0.5}]'
 
     Args:
         kb_id: Knowledge base identifier
         pattern_name: Pattern hash/name
 
     Returns:
-        Dictionary of emotives (e.g., {'joy': [0.5, 0.6], 'anger': [0.1]})
-        Empty dict if not found or not yet migrated
+        List of emotive dicts (e.g., [{'joy': 0.9, 'confidence': 0.8}, {...}])
+        Empty list if not found
     """
     client = await get_redis_client()
 
     key = f"{kb_id}:emotives:{pattern_name}"
 
     try:
-        emotives_raw = await client.hgetall(key)
+        emotives_raw = await client.get(key)
 
         if not emotives_raw:
-            return {}
+            return []
 
-        # Deserialize JSON values
+        # Deserialize JSON string to list
         import json
-        emotives = {}
-        for k, v in emotives_raw.items():
-            try:
-                emotives[k] = json.loads(v)
-            except json.JSONDecodeError:
-                # Fallback to raw value if not JSON
-                emotives[k] = v
+        emotives = json.loads(emotives_raw)
+
+        # Ensure it's a list
+        if not isinstance(emotives, list):
+            logger.warning(f"Emotives for {pattern_name} is not a list: {type(emotives)}")
+            return []
 
         return emotives
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse emotives JSON for {pattern_name}: {e}")
+        return []
     except Exception as e:
         logger.error(f"Failed to get emotives for {pattern_name}: {e}")
-        return {}
+        return []
 
 
 async def get_pattern_metadata(kb_id: str, pattern_name: str) -> Dict[str, Any]:
     """
-    Get metadata hash for a pattern from Redis.
+    Get metadata dict for a pattern from Redis.
 
+    KATO stores metadata as a JSON-encoded dict.
     Redis key format: {kb_id}:metadata:{pattern_name}
-    Values are JSON-serialized data stored as hash fields.
+    Value format: JSON string like '{"key": "value", "tags": ["a", "b"]}'
 
     Args:
         kb_id: Knowledge base identifier
@@ -331,29 +401,31 @@ async def get_pattern_metadata(kb_id: str, pattern_name: str) -> Dict[str, Any]:
 
     Returns:
         Dictionary of metadata fields
-        Empty dict if not found or not yet migrated
+        Empty dict if not found
     """
     client = await get_redis_client()
 
     key = f"{kb_id}:metadata:{pattern_name}"
 
     try:
-        metadata_raw = await client.hgetall(key)
+        metadata_raw = await client.get(key)
 
         if not metadata_raw:
             return {}
 
-        # Deserialize JSON values
+        # Deserialize JSON string to dict
         import json
-        metadata = {}
-        for k, v in metadata_raw.items():
-            try:
-                metadata[k] = json.loads(v)
-            except json.JSONDecodeError:
-                # Fallback to raw value if not JSON
-                metadata[k] = v
+        metadata = json.loads(metadata_raw)
+
+        # Ensure it's a dict
+        if not isinstance(metadata, dict):
+            logger.warning(f"Metadata for {pattern_name} is not a dict: {type(metadata)}")
+            return {}
 
         return metadata
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse metadata JSON for {pattern_name}: {e}")
+        return {}
     except Exception as e:
         logger.error(f"Failed to get metadata for {pattern_name}: {e}")
         return {}
@@ -389,17 +461,18 @@ async def set_pattern_frequency(kb_id: str, pattern_name: str, frequency: int) -
         return False
 
 
-async def set_pattern_emotives(kb_id: str, pattern_name: str, emotives: Dict[str, Any]) -> bool:
+async def set_pattern_emotives(kb_id: str, pattern_name: str, emotives: list[Dict[str, Any]]) -> bool:
     """
-    Set emotives hash for a pattern in Redis (if not in read-only mode).
+    Set emotives list for a pattern in Redis (if not in read-only mode).
 
+    KATO stores emotives as a JSON-encoded list (rolling window of emotive dicts).
     Redis key format: {kb_id}:emotives:{pattern_name}
-    Values are JSON-serialized arrays stored as hash fields.
+    Value format: JSON string like '[{"joy": 0.9}, {"joy": 0.5}]'
 
     Args:
         kb_id: Knowledge base identifier
         pattern_name: Pattern hash/name
-        emotives: Dictionary of emotives (e.g., {'joy': [0.5, 0.6], 'anger': [0.1]})
+        emotives: List of emotive dicts (e.g., [{'joy': 0.9, 'confidence': 0.8}, {...}])
 
     Returns:
         True if set successfully, False otherwise
@@ -415,16 +488,10 @@ async def set_pattern_emotives(kb_id: str, pattern_name: str, emotives: Dict[str
 
     try:
         import json
-        # Delete existing hash first
-        await client.delete(key)
+        # Store as JSON string (matching KATO's format)
+        await client.set(key, json.dumps(emotives))
 
-        # Set new emotives
-        if emotives:
-            # Serialize values to JSON
-            emotives_serialized = {k: json.dumps(v) for k, v in emotives.items()}
-            await client.hset(key, mapping=emotives_serialized)
-
-        logger.info(f"Set emotives for {pattern_name}: {len(emotives)} fields")
+        logger.info(f"Set emotives for {pattern_name}: {len(emotives)} items")
         return True
     except Exception as e:
         logger.error(f"Failed to set emotives for {pattern_name}: {e}")
@@ -433,10 +500,11 @@ async def set_pattern_emotives(kb_id: str, pattern_name: str, emotives: Dict[str
 
 async def set_pattern_metadata(kb_id: str, pattern_name: str, metadata: Dict[str, Any]) -> bool:
     """
-    Set metadata hash for a pattern in Redis (if not in read-only mode).
+    Set metadata dict for a pattern in Redis (if not in read-only mode).
 
+    KATO stores metadata as a JSON-encoded dict.
     Redis key format: {kb_id}:metadata:{pattern_name}
-    Values are JSON-serialized data stored as hash fields.
+    Value format: JSON string like '{"key": "value", "tags": ["a", "b"]}'
 
     Args:
         kb_id: Knowledge base identifier
@@ -457,14 +525,8 @@ async def set_pattern_metadata(kb_id: str, pattern_name: str, metadata: Dict[str
 
     try:
         import json
-        # Delete existing hash first
-        await client.delete(key)
-
-        # Set new metadata
-        if metadata:
-            # Serialize values to JSON
-            metadata_serialized = {k: json.dumps(v) for k, v in metadata.items()}
-            await client.hset(key, mapping=metadata_serialized)
+        # Store as JSON string (matching KATO's format)
+        await client.set(key, json.dumps(metadata))
 
         logger.info(f"Set metadata for {pattern_name}: {len(metadata)} fields")
         return True

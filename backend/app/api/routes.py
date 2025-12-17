@@ -997,7 +997,8 @@ async def get_patterns_for_kb(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     sort_by: str = Query('length', regex='^(frequency|length|name|token_count|created_at)$'),
-    sort_order: int = Query(-1, ge=-1, le=1)
+    sort_order: int = Query(-1, ge=-1, le=1),
+    include_metadata_flags: bool = Query(False, description="Include has_emotives and has_metadata flags for list indicators")
 ):
     """
     Get patterns for specific kb_id from hybrid architecture.
@@ -1011,12 +1012,13 @@ async def get_patterns_for_kb(
         limit: Results per page (max 500)
         sort_by: Field to sort by (frequency, length, name, token_count, created_at)
         sort_order: 1 for ASC, -1 for DESC
+        include_metadata_flags: Include existence indicators for emotives/metadata (default False)
 
     Note: Frequency sorting may take longer for kb_ids with >1M patterns
     """
     try:
         from app.db.hybrid_patterns import get_patterns_hybrid
-        return await get_patterns_hybrid(kb_id, skip, limit, sort_by, sort_order)
+        return await get_patterns_hybrid(kb_id, skip, limit, sort_by, sort_order, include_metadata_flags)
     except Exception as e:
         logger.error(f"Failed to get patterns for {kb_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))

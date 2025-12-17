@@ -20,7 +20,8 @@ async def get_patterns_hybrid(
     skip: int = 0,
     limit: int = 100,
     sort_by: str = 'length',
-    sort_order: int = -1
+    sort_order: int = -1,
+    include_metadata_flags: bool = False
 ) -> Dict[str, Any]:
     """
     Get patterns from ClickHouse + enrich with Redis metadata.
@@ -31,6 +32,7 @@ async def get_patterns_hybrid(
         limit: Max results per page
         sort_by: Field to sort by ('frequency', 'length', 'name', 'token_count', 'created_at')
         sort_order: 1 for ASC, -1 for DESC
+        include_metadata_flags: If True, include has_emotives and has_metadata flags (default False)
 
     Returns:
         {
@@ -45,11 +47,12 @@ async def get_patterns_hybrid(
         - Frequency sorting requires special handling (fetch from Redis first)
         - ClickHouse partition pruning automatically applies with kb_id filter
         - Emotives/metadata are NOT fetched in list view (performance optimization)
+        - Use include_metadata_flags=True to get existence indicators for list badges
     """
 
     # Handle frequency sorting (requires Redis first)
     if sort_by == 'frequency':
-        return await _get_patterns_sorted_by_frequency(kb_id, skip, limit, sort_order)
+        return await _get_patterns_sorted_by_frequency(kb_id, skip, limit, sort_order, include_metadata_flags)
 
     # For other sorts, use ClickHouse directly
     sort_dir = 'DESC' if sort_order == -1 else 'ASC'
@@ -63,6 +66,11 @@ async def get_patterns_hybrid(
     # Enrich with Redis frequencies (batch fetch for performance)
     pattern_names = [p['name'] for p in patterns_ch]
     frequencies = await redis_client.get_patterns_frequencies_batch(kb_id, pattern_names)
+
+    # Optionally check metadata existence for list indicators
+    metadata_flags = {}
+    if include_metadata_flags:
+        metadata_flags = await redis_client.check_patterns_metadata_existence_batch(kb_id, pattern_names)
 
     # Combine ClickHouse + Redis data
     patterns = []
@@ -86,6 +94,12 @@ async def get_patterns_hybrid(
             'emotives': {},
             'metadata': {}
         }
+
+        # Add metadata existence flags if requested
+        if include_metadata_flags and p['name'] in metadata_flags:
+            pattern['has_emotives'] = metadata_flags[p['name']]['has_emotives']
+            pattern['has_metadata'] = metadata_flags[p['name']]['has_metadata']
+
         patterns.append(pattern)
 
     return {
@@ -101,7 +115,8 @@ async def _get_patterns_sorted_by_frequency(
     kb_id: str,
     skip: int,
     limit: int,
-    sort_order: int
+    sort_order: int,
+    include_metadata_flags: bool = False
 ) -> Dict[str, Any]:
     """
     Special handling for frequency sorting.
@@ -124,6 +139,7 @@ async def _get_patterns_sorted_by_frequency(
         skip: Pagination offset
         limit: Results per page
         sort_order: 1 for ASC, -1 for DESC
+        include_metadata_flags: If True, include has_emotives and has_metadata flags
 
     Returns:
         Same format as get_patterns_hybrid()
@@ -152,6 +168,11 @@ async def _get_patterns_sorted_by_frequency(
 
     logger.info(f"Sorted and paginated to {len(page_names)} patterns, fetching full data...")
 
+    # Optionally check metadata existence for list indicators
+    metadata_flags = {}
+    if include_metadata_flags:
+        metadata_flags = await redis_client.check_patterns_metadata_existence_batch(kb_id, page_names)
+
     # Step 5: Fetch full pattern data for page from ClickHouse
     patterns = []
     for name in page_names:
@@ -174,6 +195,12 @@ async def _get_patterns_sorted_by_frequency(
                 'emotives': {},
                 'metadata': {}
             }
+
+            # Add metadata existence flags if requested
+            if include_metadata_flags and name in metadata_flags:
+                pattern['has_emotives'] = metadata_flags[name]['has_emotives']
+                pattern['has_metadata'] = metadata_flags[name]['has_metadata']
+
             patterns.append(pattern)
 
     logger.info(f"Frequency sort complete, returning {len(patterns)} patterns")

@@ -14,6 +14,8 @@ interface Pattern {
   metadata?: {
     [key: string]: any  // Arbitrary training data fields
   }
+  has_emotives?: boolean  // Indicator if pattern has emotives in Redis
+  has_metadata?: boolean  // Indicator if pattern has metadata in Redis
   [key: string]: any
 }
 
@@ -922,52 +924,60 @@ function PatternDetailModal({ pattern, onClose, onDelete, processorId }: Pattern
             </div>
 
             {/* Emotives */}
-            {(isEditing || (displayPattern.emotives && Object.keys(displayPattern.emotives).length > 0)) && (
-              <div>
-                <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
-                  Emotives {isEditing && <span className="text-xs text-blue-500">(editable JSON)</span>}
-                </label>
-                {isEditing ? (
-                  <textarea
-                    value={editedEmotives}
-                    onChange={(e) => setEditedEmotives(e.target.value)}
-                    rows={6}
-                    className="w-full bg-gray-50 dark:bg-gray-900 rounded-lg p-3 text-xs text-gray-900 dark:text-white font-mono border-2 border-blue-300 dark:border-blue-700 focus:outline-none focus:border-blue-500"
-                    placeholder='{"emotion_name": [0.5, 0.6]}'
-                  />
-                ) : (
-                  <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
+                Emotives {isEditing && <span className="text-xs text-blue-500">(editable JSON)</span>}
+              </label>
+              {isEditing ? (
+                <textarea
+                  value={editedEmotives}
+                  onChange={(e) => setEditedEmotives(e.target.value)}
+                  rows={6}
+                  className="w-full bg-gray-50 dark:bg-gray-900 rounded-lg p-3 text-xs text-gray-900 dark:text-white font-mono border-2 border-blue-300 dark:border-blue-700 focus:outline-none focus:border-blue-500"
+                  placeholder='{"emotion_name": [0.5, 0.6]}'
+                />
+              ) : (
+                <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3">
+                  {displayPattern.emotives && Object.keys(displayPattern.emotives).length > 0 ? (
                     <pre className="text-xs text-gray-900 dark:text-white overflow-auto">
                       {JSON.stringify(displayPattern.emotives, null, 2)}
                     </pre>
-                  </div>
-                )}
-              </div>
-            )}
+                  ) : (
+                    <p className="text-sm text-gray-500 dark:text-gray-400 italic">
+                      No emotives set
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* Metadata (arbitrary training data fields) */}
-            {(isEditing || (displayPattern.metadata && Object.keys(displayPattern.metadata).length > 0)) && (
-              <div>
-                <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
-                  Metadata {isEditing && <span className="text-xs text-blue-500">(editable JSON)</span>}
-                </label>
-                {isEditing ? (
-                  <textarea
-                    value={editedMetadata}
-                    onChange={(e) => setEditedMetadata(e.target.value)}
-                    rows={8}
-                    className="w-full bg-gray-50 dark:bg-gray-900 rounded-lg p-3 text-xs text-gray-900 dark:text-white font-mono border-2 border-blue-300 dark:border-blue-700 focus:outline-none focus:border-blue-500"
-                    placeholder='{"key": "value"}'
-                  />
-                ) : (
-                  <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 max-h-64 overflow-y-auto">
+            <div>
+              <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
+                Metadata {isEditing && <span className="text-xs text-blue-500">(editable JSON)</span>}
+              </label>
+              {isEditing ? (
+                <textarea
+                  value={editedMetadata}
+                  onChange={(e) => setEditedMetadata(e.target.value)}
+                  rows={8}
+                  className="w-full bg-gray-50 dark:bg-gray-900 rounded-lg p-3 text-xs text-gray-900 dark:text-white font-mono border-2 border-blue-300 dark:border-blue-700 focus:outline-none focus:border-blue-500"
+                  placeholder='{"key": "value"}'
+                />
+              ) : (
+                <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 max-h-64 overflow-y-auto">
+                  {displayPattern.metadata && Object.keys(displayPattern.metadata).length > 0 ? (
                     <pre className="text-xs text-gray-900 dark:text-white">
                       {JSON.stringify(displayPattern.metadata, null, 2)}
                     </pre>
-                  </div>
-                )}
-              </div>
-            )}
+                  ) : (
+                    <p className="text-sm text-gray-500 dark:text-gray-400 italic">
+                      No metadata set
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -1572,6 +1582,25 @@ export default function Databases() {
                       Refresh
                     </button>
                   </div>
+
+                  {/* Badge Legend */}
+                  <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
+                    <div className="flex items-center gap-4 text-sm">
+                      <span className="text-gray-600 dark:text-gray-400 font-medium">Badges:</span>
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                          E
+                        </span>
+                        <span className="text-gray-600 dark:text-gray-400">Emotives</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800">
+                          M
+                        </span>
+                        <span className="text-gray-600 dark:text-gray-400">Metadata</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Patterns List */}
@@ -1635,8 +1664,29 @@ export default function Databases() {
                               className="flex-1 text-left flex items-center justify-between group"
                             >
                               <div className="flex-1 min-w-0">
-                                <div className="font-mono text-sm text-gray-900 dark:text-white mb-1 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                                  {getPatternIdentifier(pattern)}
+                                <div className="flex items-center gap-2 mb-1">
+                                  <div className="font-mono text-sm text-gray-900 dark:text-white truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                                    {getPatternIdentifier(pattern)}
+                                  </div>
+                                  {/* Metadata Badges */}
+                                  <div className="flex items-center gap-1 flex-shrink-0">
+                                    {pattern.has_emotives && (
+                                      <span
+                                        className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                                        title="Has emotives"
+                                      >
+                                        E
+                                      </span>
+                                    )}
+                                    {pattern.has_metadata && (
+                                      <span
+                                        className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800"
+                                        title="Has metadata"
+                                      >
+                                        M
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                                 <div className="flex gap-4 text-sm text-gray-600 dark:text-gray-400">
                                   <span className="flex items-center gap-1">
