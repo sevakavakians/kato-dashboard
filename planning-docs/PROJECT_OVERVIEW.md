@@ -1,11 +1,12 @@
 # KATO Dashboard - Project Overview
 
 **Project Name**: KATO Dashboard
-**Status**: Phase 4 COMPLETE - Hierarchical Graph Pattern Visualization
+**Status**: Production Infrastructure COMPLETE - Docker Versioning and Release Automation
+**Version**: 0.1.0 (pre-release)
 **Started**: 2025-10-06
-**Last Updated**: 2025-12-10
+**Last Updated**: 2025-12-17
 **Repository**: /Users/sevakavakians/PROGRAMMING/kato-dashboard
-**Current Focus**: Awaiting Next Phase Direction
+**Current Focus**: Ready for First GHCR Release
 
 ## Purpose
 A comprehensive web-based monitoring and management dashboard for the KATO AI system. Provides real-time metrics, database browsing, session management, and analytics capabilities for system administrators.
@@ -129,33 +130,46 @@ kato-dashboard/
 └── planning-docs/              # Project management docs
 ```
 
-## Current Status: Phase 4B COMPLETE - Edge Crossing Minimization ✅
+## Current Status: Production Infrastructure COMPLETE - Docker Versioning ✅
 
-### Latest Changes: Phase 4B - Edge Crossing Minimization - COMPLETE (2025-12-10)
+### Latest Changes: Docker Versioning and Release Automation - COMPLETE (2025-12-17)
 
-**Edge Crossing Minimization for Hierarchical Graph Visualization**
-- **Problem Identified**: Hierarchical graph had unnecessary edge crossings due to D3 physics forces
-  - Blue circles (node0 patterns) appearing under unrelated green/yellow circles
-  - Visual confusion about pattern relationships
-  - Edges crossing even when patterns weren't actually cross-connected
-- **Solution Implemented**: Integrated dagre.js (Sugiyama algorithm) for optimal hierarchical layout
-  - Installed dagre.js dependency (npm install dagre @types/dagre)
-  - Created `/frontend/src/utils/graphLayout.ts` (~93 lines)
-  - Implemented computeDagreLayout() function with Sugiyama algorithm
-  - Integrated into HierarchicalGraph.tsx with useMemo hook
-  - Maps layoutMode to dagre rankDir (bu→BT, td→TB, lr→LR, rl→RL)
-  - Fixed TypeScript compilation errors
-  - Disabled D3 forces (cooldownTicks=0) to preserve optimal layout
-  - Disabled node dragging to maintain layout integrity
-- **Dependencies Added**: dagre (~57KB), @types/dagre
-  - Bundle size: 999KB → 1,057KB (+57KB)
-- **Status**: COMPLETE ✅ - Deployed to production
-- **Expected Benefits**:
-  - Blue circles positioned directly below green parent circles
-  - Minimal or zero edge crossings for well-structured hierarchies
-  - Clear visual hierarchy showing composition flow
-  - Improved readability and aesthetics
-- **Next**: Awaiting user testing and feedback before proceeding to Phase 4C (Documentation refinement)
+**Docker Container Versioning, Building, and Publishing System**
+- **Problem Solved**: kato-dashboard lacked production release infrastructure
+  - No versioning system or release automation
+  - Manual docker-compose builds only
+  - No container registry integration
+  - Version inconsistency across multiple files
+- **Solution Implemented**: Complete production-ready release system
+  - Semantic versioning (SemVer 2.0.0) with automated synchronization
+  - Primary version source: `pyproject.toml`
+  - Synchronized files: `frontend/package.json`, `VERSION`
+  - Initial version: 0.1.0 (pre-release)
+- **Automation Scripts Created**: 3 complete scripts
+  - `bump-version.sh`: Interactive version bumping (~120 lines)
+  - `build-and-push.sh`: Docker image building and GHCR publishing (~180 lines)
+  - `container-manager.sh`: End-to-end release automation (~250 lines)
+  - Enhanced `dashboard.sh`: version, pull-registry, update commands (+70 lines)
+- **Docker Infrastructure**: Multi-stage combined build
+  - Single container: frontend + backend + nginx + supervisor
+  - Multi-stage Dockerfile (~80 lines)
+  - docker-compose.prod.yml for registry-based deployment (~30 lines)
+  - Optimized image size: ~800MB
+- **Multi-Tag Strategy**: 4-tier tagging system
+  - Specific: `ghcr.io/sevakavakians/kato-dashboard:0.1.0`
+  - Minor: `ghcr.io/sevakavakians/kato-dashboard:0.1`
+  - Major: `ghcr.io/sevakavakians/kato-dashboard:0`
+  - Latest: `ghcr.io/sevakavakians/kato-dashboard:latest`
+  - Pre-release isolation (no `:latest` for pre-releases)
+- **Documentation Created**: Comprehensive maintenance guides
+  - `docs/maintenance/version-management.md` (~300 lines)
+  - `docs/maintenance/releasing.md` (~400 lines)
+  - Updated `CLAUDE.md` with Docker Versioning section (~200 lines)
+- **Bug Fixes**: postcss.config.js ES6 → CommonJS syntax for Docker compatibility
+- **Code Metrics**: 9 files created, 5 modified, ~1,646 lines added
+- **Implementation Time**: ~6 hours (design, implementation, testing, documentation)
+- **Status**: ✅ COMPLETE - Ready for first release to GHCR (pending authentication)
+- **Next**: Authenticate with GHCR and publish first release (0.1.0 → 0.1.1)
 
 ### Previous Changes: KB Deletion & MongoDB Removal (COMPLETE - 2025-12-03)
 
@@ -383,9 +397,9 @@ kato-dashboard/
 - **Status**: COMPLETE ✅
 - **Date**: 2025-11-13
 
-### Cumulative (Through Phase 2 + Enhancements + KB Deletion + MongoDB Removal + Pattern Editing + Phase 4 + Phase 4B COMPLETE)
-- **Total Files**: 60+ (5 new in Phase 2, 3 new in enhancements, 1 deleted in MongoDB removal, 1 new in Phase 4, 1 new in Phase 4B)
-- **Total Lines of Code**: ~9,779+ (~2,115 in Phase 2, ~1,270 in enhancement #1, ~785 in enhancement #2, +140 KB deletion, -650 MongoDB removal, +350 pattern editing, +1,000 Phase 4, +93 Phase 4B graphLayout utility)
+### Cumulative (Through Phase 2 + Enhancements + KB Deletion + MongoDB Removal + Pattern Editing + Phase 4 + Phase 4B + Docker Versioning COMPLETE)
+- **Total Files**: 69+ (5 new in Phase 2, 3 new in enhancements, 1 deleted in MongoDB removal, 1 new in Phase 4, 1 new in Phase 4B, 9 new in Docker versioning)
+- **Total Lines of Code**: ~11,425+ (~2,115 in Phase 2, ~1,270 in enhancement #1, ~785 in enhancement #2, +140 KB deletion, -650 MongoDB removal, +350 pattern editing, +1,000 Phase 4, +93 Phase 4B graphLayout utility, +1,646 Docker versioning)
 - **Backend Endpoints**: 43 HTTP + 1 WebSocket (11 in Phase 2, 6 in enhancement #1, 3 in enhancement #2, +1 KB deletion, -12 MongoDB removal, +1 pattern editing, +1 Phase 4)
 - **Backend Services**: 4 (kato_api.py, analytics.py, websocket.py, hierarchy_analysis.py)
 - **Backend Database Modules**: 4 (clickhouse.py, qdrant.py, redis_client.py, symbol_stats.py + hybrid_patterns.py)
@@ -396,8 +410,12 @@ kato-dashboard/
 - **Database Browser Tabs**: 3 (Patterns [ClickHouse], Symbols [Redis], Redis Keys) - MongoDB tab removed
 - **Graph Layout Algorithms**: 7 (force-directed, 4 hierarchical with dagre, 2 radial)
 - **Graph Layout Libraries**: 2 (react-force-graph-2d, dagre with Sugiyama algorithm)
-- **Docker Containers**: 2
-- **Total Development Time**: ~45 hours (Phase 4: 11.5h, Phase 4B: 1.5h)
+- **Docker Infrastructure**: Multi-stage combined Dockerfile, docker-compose.yml (dev), docker-compose.prod.yml (registry)
+- **Versioning System**: Semantic versioning with automated synchronization (pyproject.toml, package.json, VERSION)
+- **Automation Scripts**: 3 release scripts + enhanced dashboard.sh (~640 lines)
+- **Container Registry**: GitHub Container Registry (ghcr.io) integration ready
+- **Current Version**: 0.1.0 (pre-release)
+- **Total Development Time**: ~51 hours (Phase 4: 11.5h, Phase 4B: 1.5h, Docker Versioning: 6h)
 
 ## Configuration
 

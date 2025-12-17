@@ -22,6 +22,8 @@ COMPOSE_FILE="docker-compose.yml"
 KATO_NETWORK="kato_kato-network"
 BACKEND_CONTAINER="kato-dashboard-backend"
 FRONTEND_CONTAINER="kato-dashboard-frontend"
+REGISTRY="ghcr.io/sevakavakians"
+IMAGE_NAME="kato-dashboard"
 
 # Print functions
 print_header() {
@@ -483,34 +485,196 @@ test_endpoints() {
     echo ""
 }
 
+# Show version
+show_version() {
+    print_header
+    print_info "KATO Dashboard Version Information"
+    echo ""
+
+    # Get version from pyproject.toml
+    if [ -f "pyproject.toml" ]; then
+        local version=$(grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+        print_step "Current Version: $version"
+    else
+        print_warning "pyproject.toml not found"
+    fi
+
+    # Get version from VERSION file
+    if [ -f "VERSION" ]; then
+        local file_version=$(cat VERSION)
+        print_step "VERSION file: $file_version"
+    fi
+
+    # Get version from frontend package.json
+    if [ -f "frontend/package.json" ]; then
+        local frontend_version=$(grep '"version":' frontend/package.json | sed 's/.*"version": "\(.*\)".*/\1/')
+        print_step "Frontend version: $frontend_version"
+    fi
+
+    echo ""
+
+    # Check if running from registry or local build
+    if docker ps | grep -q "$BACKEND_CONTAINER"; then
+        print_step "Checking running container version..."
+        local container_version=$(docker inspect $BACKEND_CONTAINER --format '{{index .Config.Labels "org.opencontainers.image.version"}}' 2>/dev/null || echo "unknown")
+        if [ "$container_version" != "unknown" ] && [ -n "$container_version" ]; then
+            print_success "Running container version: $container_version"
+
+            local git_commit=$(docker inspect $BACKEND_CONTAINER --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' 2>/dev/null || echo "unknown")
+            if [ "$git_commit" != "unknown" ] && [ -n "$git_commit" ]; then
+                print_info "Git commit: $git_commit"
+            fi
+
+            local build_date=$(docker inspect $BACKEND_CONTAINER --format '{{index .Config.Labels "org.opencontainers.image.created"}}' 2>/dev/null || echo "unknown")
+            if [ "$build_date" != "unknown" ] && [ -n "$build_date" ]; then
+                print_info "Build date: $build_date"
+            fi
+        else
+            print_info "Running container version: Built from local sources"
+        fi
+    else
+        print_warning "Dashboard is not running"
+    fi
+
+    echo ""
+}
+
+# Pull images from registry
+pull_registry() {
+    local version=${1:-latest}
+
+    print_header
+    print_info "Pulling dashboard images from registry..."
+    echo ""
+
+    check_prerequisites
+
+    local image_tag="${REGISTRY}/${IMAGE_NAME}:${version}"
+
+    print_step "Pulling image: $image_tag"
+    if docker pull "$image_tag"; then
+        print_success "Successfully pulled: $image_tag"
+        echo ""
+
+        # Show image info
+        print_info "Image details:"
+        docker inspect "$image_tag" --format '  Version: {{index .Config.Labels "org.opencontainers.image.version"}}' 2>/dev/null || echo "  Version: unknown"
+        docker inspect "$image_tag" --format '  Git commit: {{index .Config.Labels "org.opencontainers.image.revision"}}' 2>/dev/null || echo "  Git commit: unknown"
+        docker inspect "$image_tag" --format '  Build date: {{index .Config.Labels "org.opencontainers.image.created"}}' 2>/dev/null || echo "  Build date: unknown"
+        echo ""
+
+        print_info "To use this image, update docker-compose.yml or use docker-compose.prod.yml"
+        print_info "Then restart with: ./dashboard.sh restart"
+    else
+        print_error "Failed to pull image from registry"
+        print_info "Available tags at: https://github.com/intelligent-artifacts/kato-dashboard/pkgs/container/kato-dashboard"
+        exit 1
+    fi
+
+    echo ""
+}
+
+# Update dashboard (pull latest from registry and restart)
+update_dashboard() {
+    local version=${1:-latest}
+
+    print_header
+    print_info "Updating KATO Dashboard from registry..."
+    echo ""
+
+    check_prerequisites
+
+    # Check if docker-compose.prod.yml exists
+    if [ ! -f "docker-compose.prod.yml" ]; then
+        print_error "docker-compose.prod.yml not found"
+        print_info "This command requires the production compose file that uses registry images"
+        exit 1
+    fi
+
+    print_step "Pulling latest image: $version"
+    local image_tag="${REGISTRY}/${IMAGE_NAME}:${version}"
+
+    if ! docker pull "$image_tag"; then
+        print_error "Failed to pull image from registry"
+        exit 1
+    fi
+
+    print_success "Image pulled successfully"
+    echo ""
+
+    # Check if dashboard is running
+    if docker ps | grep -q "$BACKEND_CONTAINER"; then
+        print_step "Stopping current dashboard..."
+        docker-compose -f docker-compose.prod.yml down
+        print_success "Stopped"
+    fi
+
+    echo ""
+    print_step "Starting updated dashboard..."
+    docker-compose -f docker-compose.prod.yml up -d
+
+    echo ""
+    print_step "Waiting for services to be healthy..."
+    sleep 5
+
+    # Health checks
+    if curl -s http://localhost:3001/health > /dev/null 2>&1; then
+        print_success "Dashboard is healthy"
+
+        # Show new version
+        local new_version=$(docker inspect $BACKEND_CONTAINER --format '{{index .Config.Labels "org.opencontainers.image.version"}}' 2>/dev/null || echo "unknown")
+        if [ "$new_version" != "unknown" ] && [ -n "$new_version" ]; then
+            print_info "Now running version: $new_version"
+        fi
+    else
+        print_error "Health check failed"
+        print_info "Check logs with: ./dashboard.sh logs"
+        exit 1
+    fi
+
+    echo ""
+    print_success "Dashboard updated successfully! 🎉"
+    echo ""
+}
+
 # Show help
 show_help() {
     print_header
     echo "Usage: ./dashboard.sh [command] [options]"
     echo ""
     echo "Commands:"
-    echo "  start              Start the dashboard"
-    echo "  stop               Stop the dashboard"
-    echo "  restart            Restart the dashboard"
-    echo "  status             Show dashboard status and health"
-    echo "  logs [service]     View logs (backend|frontend|all)"
-    echo "  build [--no-cache] Build containers"
-    echo "  pull               Pull latest base images"
-    echo "  clean              Stop and remove all containers and volumes"
-    echo "  exec <service>     Open shell in container (backend|frontend)"
-    echo "  test               Test all endpoints"
-    echo "  help               Show this help message"
+    echo "  start                Start the dashboard"
+    echo "  stop                 Stop the dashboard"
+    echo "  restart              Restart the dashboard"
+    echo "  status               Show dashboard status and health"
+    echo "  logs [service]       View logs (backend|frontend|all)"
+    echo "  build [--no-cache]   Build containers from source"
+    echo "  pull                 Pull latest base images for building"
+    echo "  clean                Stop and remove all containers and volumes"
+    echo "  exec <service>       Open shell in container (backend|frontend)"
+    echo "  test                 Test all endpoints"
+    echo "  version              Show version information"
+    echo "  pull-registry [tag]  Pull dashboard image from registry (default: latest)"
+    echo "  update [tag]         Pull latest from registry and restart (requires prod compose)"
+    echo "  help                 Show this help message"
     echo ""
     echo "Examples:"
-    echo "  ./dashboard.sh start           # Start the dashboard"
-    echo "  ./dashboard.sh logs backend    # View backend logs"
-    echo "  ./dashboard.sh exec backend    # Open shell in backend container"
-    echo "  ./dashboard.sh build --no-cache # Rebuild from scratch"
+    echo "  ./dashboard.sh start               # Start the dashboard"
+    echo "  ./dashboard.sh logs backend        # View backend logs"
+    echo "  ./dashboard.sh exec backend        # Open shell in backend container"
+    echo "  ./dashboard.sh build --no-cache    # Rebuild from scratch"
+    echo "  ./dashboard.sh version             # Show current version"
+    echo "  ./dashboard.sh pull-registry 0.1.0 # Pull specific version from registry"
+    echo "  ./dashboard.sh update              # Update to latest from registry"
     echo ""
     echo "URLs:"
     echo "  Frontend:  http://localhost:3001"
     echo "  Backend:   http://localhost:8080"
     echo "  API Docs:  http://localhost:8080/docs"
+    echo ""
+    echo "Registry:"
+    echo "  Images:    $REGISTRY/$IMAGE_NAME"
+    echo "  Packages:  https://github.com/intelligent-artifacts/kato-dashboard/pkgs/container/kato-dashboard"
     echo ""
 }
 
@@ -553,6 +717,15 @@ main() {
             ;;
         test)
             test_endpoints
+            ;;
+        version|--version|-v)
+            show_version
+            ;;
+        pull-registry)
+            pull_registry "$2"
+            ;;
+        update)
+            update_dashboard "$2"
             ;;
         help|--help|-h)
             show_help

@@ -448,6 +448,285 @@ Create `.env` file in `frontend/` directory:
 VITE_API_URL=http://localhost:8080
 ```
 
+## Docker Versioning and Release
+
+KATO Dashboard uses a comprehensive Docker versioning system inspired by KATO's proven approach, with automated scripts for version bumping, image building, and registry publishing.
+
+### Version Management
+
+**Current Version**: `0.1.0` (pre-release)
+
+Version information is maintained in three synchronized files:
+- `pyproject.toml` (primary source)
+- `frontend/package.json` (frontend version)
+- `VERSION` (simple text file)
+
+**Semantic Versioning**: We follow [SemVer 2.0.0](https://semver.org/)
+- **MAJOR** (X.0.0): Breaking changes, incompatible API changes
+- **MINOR** (x.Y.0): New features, backward-compatible additions
+- **PATCH** (x.y.Z): Bug fixes, documentation updates, minor improvements
+
+### Automation Scripts
+
+#### `bump-version.sh` - Version Bumping
+
+Updates all version files and optionally creates git commits and tags:
+
+```bash
+# Patch release (0.1.0 → 0.1.1)
+./bump-version.sh patch
+
+# Minor release (0.1.0 → 0.2.0)
+./bump-version.sh minor "Add new analytics feature"
+
+# Major release (0.1.0 → 1.0.0)
+./bump-version.sh major "Breaking API changes"
+```
+
+**Features**:
+- Interactive with confirmation prompts
+- Updates `pyproject.toml`, `package.json`, and `VERSION`
+- Shows git diff of changes
+- Optional git commit and tag creation
+- Provides next steps guidance
+
+#### `build-and-push.sh` - Docker Image Building
+
+Builds Docker images with proper versioning and pushes to GitHub Container Registry (GHCR):
+
+```bash
+# Build and push to registry
+./build-and-push.sh
+
+# Build only, don't push
+./build-and-push.sh --no-push
+
+# Use custom registry
+./build-and-push.sh --registry docker.io/myuser
+```
+
+**Multi-Tag Strategy**:
+
+For stable releases (e.g., `0.1.0`):
+```
+ghcr.io/sevakavakians/kato-dashboard:0.1.0   # Specific version (immutable)
+ghcr.io/sevakavakians/kato-dashboard:0.1     # Minor version (receives patches)
+ghcr.io/sevakavakians/kato-dashboard:0       # Major version (receives minor updates)
+ghcr.io/sevakavakians/kato-dashboard:latest  # Latest stable
+```
+
+For pre-releases (e.g., `0.1.0-beta.1`):
+```
+ghcr.io/sevakavakians/kato-dashboard:0.1.0-beta.1  # Specific pre-release only
+# Does NOT update :latest, :0.1, or :0 tags
+```
+
+**Build Metadata**:
+- Version number injected as build arg
+- Git commit hash for traceability
+- Build date in ISO 8601 format
+- OCI-compliant container labels
+
+#### `container-manager.sh` - End-to-End Automation
+
+Complete release automation from version bump to registry verification:
+
+```bash
+# Patch release (bug fixes)
+./container-manager.sh patch
+
+# Minor release (new features)
+./container-manager.sh minor "Add session management"
+
+# Major release (breaking changes)
+./container-manager.sh major "Dashboard v2 architecture"
+```
+
+**Complete Workflow**:
+1. ✓ Validates environment (git, Docker)
+2. ✓ Bumps version in all files
+3. ✓ Reminds to update CHANGELOG.md
+4. ✓ Creates git commit and tag
+5. ✓ Pushes to remote repository
+6. ✓ Builds Docker images with metadata
+7. ✓ Pushes images to registry
+8. ✓ Verifies images in registry
+
+**Environment Variables**:
+```bash
+# Skip all confirmations (use with caution!)
+AUTO_MODE=true ./container-manager.sh patch
+
+# Use custom registry
+REGISTRY=docker.io/myuser ./container-manager.sh minor
+```
+
+#### `dashboard.sh` - Production Updates
+
+Extended with registry operations for production deployments:
+
+```bash
+# Show version information
+./dashboard.sh version
+
+# Pull specific version from registry
+./dashboard.sh pull-registry 0.1.0
+
+# Pull and deploy latest from registry (requires docker-compose.prod.yml)
+./dashboard.sh update
+```
+
+### Container Images
+
+#### Development (Local Build)
+
+Uses separate backend and frontend containers built from source:
+
+```bash
+# Build from source
+docker-compose build
+
+# Or use dashboard.sh
+./dashboard.sh build
+```
+
+**Docker Compose**: `docker-compose.yml`
+- Backend: `./backend/Dockerfile`
+- Frontend: `./frontend/Dockerfile`
+- Optimized for local development
+
+#### Production (Registry Image)
+
+Uses combined pre-built image from GHCR with both frontend and backend:
+
+```bash
+# Pull and run latest
+docker-compose -f docker-compose.prod.yml up -d
+
+# Or use dashboard.sh
+./dashboard.sh update
+```
+
+**Docker Compose**: `docker-compose.prod.yml`
+- Combined image: `ghcr.io/sevakavakians/kato-dashboard:latest`
+- Nginx serves frontend on port 3001
+- Nginx proxies `/api/*` to backend (internal port 8080)
+- Managed by supervisor (both services in one container)
+
+**Combined Dockerfile**: `Dockerfile`
+- **Stage 1**: Build frontend (Node.js → static files)
+- **Stage 2**: Prepare backend (Python dependencies)
+- **Stage 3**: Production (Nginx + Uvicorn via supervisor)
+- Multi-arch support: amd64, arm64 (future)
+
+### Registry Configuration
+
+**GitHub Container Registry (GHCR)**:
+- Registry: `ghcr.io/sevakavakians`
+- Image: `kato-dashboard`
+- Full path: `ghcr.io/sevakavakians/kato-dashboard`
+- Packages: https://github.com/intelligent-artifacts/kato-dashboard/pkgs/container/kato-dashboard
+
+**Authentication**:
+```bash
+# Login to GHCR
+echo $GITHUB_TOKEN | docker login ghcr.io -u YOUR_USERNAME --password-stdin
+```
+
+**Required Token Permissions**: `write:packages` scope
+
+### Version Pinning Strategies
+
+Choose your stability vs. updates trade-off:
+
+1. **Pin to specific version** (Recommended for production):
+   ```yaml
+   image: ghcr.io/sevakavakians/kato-dashboard:0.1.0
+   ```
+   - Maximum stability
+   - Manual updates required
+   - No unexpected changes
+
+2. **Pin to minor version** (Auto-receive patches):
+   ```yaml
+   image: ghcr.io/sevakavakians/kato-dashboard:0.1
+   ```
+   - Automatic bug fixes
+   - Security patches included
+   - No breaking changes
+
+3. **Pin to major version** (Auto-receive features):
+   ```yaml
+   image: ghcr.io/sevakavakians/kato-dashboard:0
+   ```
+   - Automatic new features
+   - May include minor behavior changes
+   - Good for non-critical environments
+
+4. **Use latest** (Development/testing only):
+   ```yaml
+   image: ghcr.io/sevakavakians/kato-dashboard:latest
+   ```
+   - Always get newest version
+   - May break without warning
+   - Not recommended for production
+
+### Release Process
+
+**Quick Release**:
+```bash
+# One command does everything
+./container-manager.sh patch "Fix authentication bug"
+```
+
+**Manual Steps**:
+```bash
+# 1. Bump version
+./bump-version.sh patch "Fix authentication bug"
+
+# 2. Update CHANGELOG.md
+vim CHANGELOG.md
+
+# 3. Commit and tag
+git add CHANGELOG.md
+git commit --amend --no-edit
+git push origin main
+git push origin v0.1.1
+
+# 4. Build and push images
+./build-and-push.sh
+
+# 5. Create GitHub Release
+# Visit: https://github.com/intelligent-artifacts/kato-dashboard/releases/new?tag=v0.1.1
+```
+
+### Pre-Release Versions
+
+For alpha, beta, or release candidate testing:
+
+```bash
+# Create pre-release
+./bump-version.sh minor "0.2.0-beta.1"
+
+# Build and push (only tags specific version, not latest)
+./build-and-push.sh
+
+# Pull and test
+docker pull ghcr.io/sevakavakians/kato-dashboard:0.2.0-beta.1
+```
+
+**Pre-release rules**:
+- Format: `MAJOR.MINOR.PATCH-PRERELEASE.NUMBER`
+- Examples: `0.2.0-alpha.1`, `0.2.0-beta.1`, `0.2.0-rc.1`
+- Never updates `:latest`, `:MAJOR`, or `:MAJOR.MINOR` tags
+- Only tagged with specific pre-release version
+
+### Documentation
+
+Comprehensive versioning and release documentation:
+- **[version-management.md](docs/maintenance/version-management.md)**: Semantic versioning guide
+- **[releasing.md](docs/maintenance/releasing.md)**: Complete release process
+
 ## Docker Deployment
 
 ### Prerequisites

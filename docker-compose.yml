@@ -1,3 +1,14 @@
+# KATO Dashboard - Docker Compose Configuration (Development)
+#
+# This configuration is optimized for local development with separate backend and frontend containers.
+# For production deployments using the combined image from the registry, see docker-compose.prod.yml
+#
+# Usage:
+#   Development (local build):  docker-compose up -d
+#   Production (registry):      docker-compose -f docker-compose.prod.yml up -d
+#
+# To use a specific version from the registry, see docker-compose.prod.yml
+
 services:
   # Backend API
   dashboard-backend:
