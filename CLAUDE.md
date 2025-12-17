@@ -257,7 +257,8 @@ frontend/
 
 ### 3. Database Access (Read-Only)
 **Locations**:
-- ClickHouse: `backend/app/db/mongodb.py`
+- ClickHouse: `backend/app/db/clickhouse.py`
+- Hybrid Patterns (ClickHouse + Redis): `backend/app/db/hybrid_patterns.py`
 - Qdrant: `backend/app/db/qdrant.py`
 - Redis: `backend/app/db/redis_client.py`
 
@@ -889,7 +890,7 @@ npm run test:coverage
 - Verify dashboard is on KATO network: `docker inspect kato-dashboard-backend`
 - Test database connectivity from container:
 ```bash
-docker exec -it kato-dashboard-backend python -c "from app.db.mongodb import get_mongo_client; import asyncio; asyncio.run(get_mongo_client())"
+docker exec -it kato-dashboard-backend python -c "from app.db.clickhouse import get_clickhouse_client; import asyncio; asyncio.run(get_clickhouse_client().ping())"
 ```
 
 ### CORS errors in browser
@@ -1017,7 +1018,7 @@ docker exec -it kato-dashboard-backend bash
 docker exec -it kato-dashboard-frontend sh
 
 # Database Direct Access
-docker exec -it kato-mongodb mongo
+docker exec -it kato-clickhouse clickhouse-client
 docker exec -it kato-redis redis-cli
 curl http://localhost:6333/collections  # Qdrant
 

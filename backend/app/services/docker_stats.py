@@ -16,7 +16,7 @@ CACHE_TTL = timedelta(seconds=5)
 # KATO container names to monitor
 KATO_CONTAINERS = [
     'kato',
-    'kato-mongodb',
+    'kato-clickhouse',
     'kato-qdrant',
     'kato-redis'
 ]

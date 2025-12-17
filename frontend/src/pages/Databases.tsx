@@ -1291,7 +1291,7 @@ export default function Databases() {
           Database Management
         </h1>
         <p className="text-gray-600 dark:text-gray-400 mt-2">
-          Browse and analyze MongoDB, Qdrant, and Redis databases
+          Browse and analyze ClickHouse patterns, Qdrant vectors, and Redis cache
         </p>
       </div>
 

@@ -184,7 +184,6 @@ make install-frontend
 KATO_API_URL=http://kato:8000
 
 # Databases (Read-Only)
-# MONGO_URL (removed)=mongodb://mongodb:27017
 DATABASE_READ_ONLY=true
 QDRANT_URL=http://qdrant:6333
 REDIS_URL=redis://redis:6379
