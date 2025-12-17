@@ -625,7 +625,7 @@ docker-compose -f docker-compose.prod.yml up -d
 - Registry: `ghcr.io/sevakavakians`
 - Image: `kato-dashboard`
 - Full path: `ghcr.io/sevakavakians/kato-dashboard`
-- Packages: https://github.com/intelligent-artifacts/kato-dashboard/pkgs/container/kato-dashboard
+- Packages: https://github.com/sevakavakians/kato-dashboard/pkgs/container/kato-dashboard
 
 **Authentication**:
 ```bash
@@ -634,6 +634,17 @@ echo $GITHUB_TOKEN | docker login ghcr.io -u YOUR_USERNAME --password-stdin
 ```
 
 **Required Token Permissions**: `write:packages` scope
+
+**Package Visibility**: Packages are private by default. To make them publicly accessible:
+1. Visit: https://github.com/sevakavakians?tab=packages
+2. Click on `kato-dashboard` package
+3. Go to **Package settings** → **Change visibility** → **Public**
+4. Confirm by typing the package name
+
+Once public, anyone can pull images without authentication:
+```bash
+docker pull ghcr.io/sevakavakians/kato-dashboard:latest
+```
 
 ### Version Pinning Strategies
 
@@ -679,7 +690,7 @@ Choose your stability vs. updates trade-off:
 ./container-manager.sh patch "Fix authentication bug"
 ```
 
-**Manual Steps**:
+**Manual Steps** (Automated via GitHub Actions):
 ```bash
 # 1. Bump version
 ./bump-version.sh patch "Fix authentication bug"
@@ -693,12 +704,20 @@ git commit --amend --no-edit
 git push origin main
 git push origin v0.1.1
 
-# 4. Build and push images
-./build-and-push.sh
-
-# 5. Create GitHub Release
-# Visit: https://github.com/intelligent-artifacts/kato-dashboard/releases/new?tag=v0.1.1
+# 4. GitHub Actions automatically:
+#    - Builds multi-arch Docker images (amd64, arm64)
+#    - Pushes to GHCR with appropriate tags
+#    - Creates GitHub Release with release notes
+#    - Monitors workflow at: https://github.com/sevakavakians/kato-dashboard/actions
 ```
+
+**Note**: Images are now automatically built and published via GitHub Actions (`.github/workflows/release.yml`) when you push a version tag. The workflow:
+- Triggers on `v*.*.*` tags (e.g., `v0.1.0`, `v1.2.3`)
+- Builds for `linux/amd64` and `linux/arm64` architectures
+- Pushes to `ghcr.io/sevakavakians/kato-dashboard`
+- Creates appropriate tags (specific version, minor, major, latest)
+- Automatically creates GitHub Release for stable versions
+- Skips updating `:latest` for pre-release versions
 
 ### Pre-Release Versions
 
@@ -708,8 +727,12 @@ For alpha, beta, or release candidate testing:
 # Create pre-release
 ./bump-version.sh minor "0.2.0-beta.1"
 
-# Build and push (only tags specific version, not latest)
-./build-and-push.sh
+# Commit and push tag
+git push origin main
+git push origin v0.2.0-beta.1
+
+# GitHub Actions automatically builds and pushes (only specific version tag)
+# Monitor at: https://github.com/sevakavakians/kato-dashboard/actions
 
 # Pull and test
 docker pull ghcr.io/sevakavakians/kato-dashboard:0.2.0-beta.1
@@ -718,8 +741,10 @@ docker pull ghcr.io/sevakavakians/kato-dashboard:0.2.0-beta.1
 **Pre-release rules**:
 - Format: `MAJOR.MINOR.PATCH-PRERELEASE.NUMBER`
 - Examples: `0.2.0-alpha.1`, `0.2.0-beta.1`, `0.2.0-rc.1`
+- GitHub Actions automatically detects pre-releases (versions with `-`)
 - Never updates `:latest`, `:MAJOR`, or `:MAJOR.MINOR` tags
 - Only tagged with specific pre-release version
+- Does not create GitHub Release (manual only)
 
 ### Documentation
 

@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}
 authors = [
-    {name = "Intelligent Artifacts", email = "contact@intelligentartifacts.com"}
+    {name = "Sevak Avakians", email = "sevak@avakians.com"}
 ]
 keywords = ["kato", "dashboard", "monitoring", "ai", "management"]
 classifiers = [
@@ -25,10 +25,10 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/intelligent-artifacts/kato-dashboard"
-Documentation = "https://github.com/intelligent-artifacts/kato-dashboard#readme"
-Repository = "https://github.com/intelligent-artifacts/kato-dashboard"
-Issues = "https://github.com/intelligent-artifacts/kato-dashboard/issues"
+Homepage = "https://github.com/sevakavakians/kato-dashboard"
+Documentation = "https://github.com/sevakavakians/kato-dashboard#readme"
+Repository = "https://github.com/sevakavakians/kato-dashboard"
+Issues = "https://github.com/sevakavakians/kato-dashboard/issues"
 
 [tool.setuptools]
 packages = ["backend"]

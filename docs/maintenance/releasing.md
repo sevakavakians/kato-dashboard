@@ -134,7 +134,7 @@ See [Manual Release](#manual-release) section below.
 
 After successful release:
 
-1. Visit: `https://github.com/intelligent-artifacts/kato-dashboard/releases/new?tag=v0.x.x`
+1. Visit: `https://github.com/sevakavakians/kato-dashboard/releases/new?tag=v0.x.x`
 2. Select the created tag
 3. Set release title: `v0.x.x - [Brief Description]`
 4. Copy relevant section from CHANGELOG.md

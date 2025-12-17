@@ -63,10 +63,10 @@ LABEL org.opencontainers.image.description="Comprehensive web-based monitoring a
 LABEL org.opencontainers.image.version="${VERSION}"
 LABEL org.opencontainers.image.revision="${GIT_COMMIT}"
 LABEL org.opencontainers.image.created="${BUILD_DATE}"
-LABEL org.opencontainers.image.vendor="Intelligent Artifacts"
-LABEL org.opencontainers.image.source="https://github.com/intelligent-artifacts/kato-dashboard"
+LABEL org.opencontainers.image.vendor="Sevak Avakians"
+LABEL org.opencontainers.image.source="https://github.com/sevakavakians/kato-dashboard"
 LABEL org.opencontainers.image.licenses="MIT"
-LABEL org.opencontainers.image.documentation="https://github.com/intelligent-artifacts/kato-dashboard#readme"
+LABEL org.opencontainers.image.documentation="https://github.com/sevakavakians/kato-dashboard#readme"
 
 # Install Python and supervisor for process management
 RUN apk add --no-cache \

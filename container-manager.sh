@@ -402,7 +402,7 @@ echo "  ${REGISTRY}/${IMAGE_NAME}:latest"
 echo ""
 
 log_info "Next steps:"
-echo "  1. Create GitHub Release: https://github.com/intelligent-artifacts/kato-dashboard/releases/new?tag=v${NEW_VERSION}"
+echo "  1. Create GitHub Release: https://github.com/sevakavakians/kato-dashboard/releases/new?tag=v${NEW_VERSION}"
 echo "  2. Announce the release"
 echo "  3. Update deployment environments"
 echo ""

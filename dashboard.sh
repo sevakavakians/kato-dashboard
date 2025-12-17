@@ -567,7 +567,7 @@ pull_registry() {
         print_info "Then restart with: ./dashboard.sh restart"
     else
         print_error "Failed to pull image from registry"
-        print_info "Available tags at: https://github.com/intelligent-artifacts/kato-dashboard/pkgs/container/kato-dashboard"
+        print_info "Available tags at: https://github.com/sevakavakians/kato-dashboard/pkgs/container/kato-dashboard"
         exit 1
     fi
 
@@ -674,7 +674,7 @@ show_help() {
     echo ""
     echo "Registry:"
     echo "  Images:    $REGISTRY/$IMAGE_NAME"
-    echo "  Packages:  https://github.com/intelligent-artifacts/kato-dashboard/pkgs/container/kato-dashboard"
+    echo "  Packages:  https://github.com/sevakavakians/kato-dashboard/pkgs/container/kato-dashboard"
     echo ""
 }
 
