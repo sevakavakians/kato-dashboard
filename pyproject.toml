@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kato-dashboard"
-version = "0.1.1"
+version = "0.1.2"
 description = "Comprehensive web-based monitoring and management system for the KATO AI platform"
 readme = "README.md"
 requires-python = ">=3.11"
