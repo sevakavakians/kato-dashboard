@@ -74,6 +74,7 @@ jobs:
             type=semver,pattern={{version}},enable=${{ steps.version.outputs.prerelease == 'true' }}
 
       - name: Build and push Docker image
+        id: build-and-push
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -90,13 +91,11 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Create GitHub Release
-        uses: actions/create-release@v1
+        uses: softprops/action-gh-release@v2
         if: steps.version.outputs.prerelease == 'false'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ steps.version.outputs.version }}
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Release ${{ steps.version.outputs.version }}
           body: |
             ## KATO Dashboard ${{ steps.version.outputs.version }}
 
@@ -128,4 +127,4 @@ jobs:
           prerelease: false
 
       - name: Image digest
-        run: echo "Image pushed with digest ${{ steps.build.outputs.digest }}"
+        run: echo "Image pushed with digest ${{ steps.build-and-push.outputs.digest }}"
