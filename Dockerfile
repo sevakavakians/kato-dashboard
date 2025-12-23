@@ -30,14 +30,16 @@ RUN npm run build
 #############################################
 # Stage 2: Prepare Backend
 #############################################
-FROM python:3.11-slim AS backend-builder
+FROM python:3.12-alpine AS backend-builder
 
 WORKDIR /app/backend
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Install system dependencies for Alpine
+RUN apk add --no-cache \
     gcc \
-    && rm -rf /var/lib/apt/lists/*
+    musl-dev \
+    python3-dev \
+    linux-headers
 
 # Copy backend requirements
 COPY backend/requirements.txt ./
@@ -78,8 +80,8 @@ RUN apk add --no-cache \
 # Create application directory
 WORKDIR /app
 
-# Copy Python dependencies from builder
-COPY --from=backend-builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+# Copy Python dependencies from builder to where Alpine's Python looks
+COPY --from=backend-builder /usr/local/lib/python3.12/site-packages /usr/lib/python3.12/site-packages
 COPY --from=backend-builder /usr/local/bin /usr/local/bin
 
 # Copy backend application
