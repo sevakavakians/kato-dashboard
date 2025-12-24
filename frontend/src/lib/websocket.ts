@@ -2,9 +2,14 @@
  * WebSocket client for real-time updates
  */
 
+// Construct WebSocket URL based on environment
 const WS_URL = import.meta.env.VITE_API_URL
   ? import.meta.env.VITE_API_URL.replace('http', 'ws') + '/ws'
-  : 'ws://localhost:8080/ws'
+  : (() => {
+      // In production, use current window location to build WebSocket URL
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+      return `${protocol}//${window.location.host}/ws`
+    })()
 
 export type WebSocketMessage = {
   type: 'metrics_update' | 'realtime_update' | 'session_event' | 'system_alert' | 'heartbeat'

@@ -3,7 +3,9 @@
  */
 import axios, { AxiosInstance } from 'axios'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
+// Use VITE_API_URL if set (for local dev), otherwise use empty string for production (relative URLs)
+// In production, the frontend is served by nginx on port 3001, which proxies /api/* to backend
+const API_BASE_URL = import.meta.env.VITE_API_URL || ''
 
 class APIClient {
   private client: AxiosInstance
