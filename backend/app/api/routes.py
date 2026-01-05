@@ -628,9 +628,11 @@ async def get_analytics_overview():
     """Get comprehensive analytics overview"""
     try:
         # Get data from multiple sources
+        from app.db.hybrid_patterns import get_processors_hybrid
+
         client = get_kato_client()
         metrics = await client.get_metrics(use_cache=True)
-        processors = await get_processor_databases()
+        processors = await get_processors_hybrid()
         qdrant_collections = await get_processor_collections()
         redis_info = await get_redis_info()
 
