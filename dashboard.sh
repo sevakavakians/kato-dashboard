@@ -20,8 +20,7 @@ cd "$SCRIPT_DIR"
 # Configuration
 COMPOSE_FILE="docker-compose.yml"
 KATO_NETWORK="kato_kato-network"
-BACKEND_CONTAINER="kato-dashboard-backend"
-FRONTEND_CONTAINER="kato-dashboard-frontend"
+CONTAINER="kato-dashboard"
 REGISTRY="ghcr.io/sevakavakians"
 IMAGE_NAME="kato-dashboard"
 
@@ -126,7 +125,7 @@ start_dashboard() {
     print_step "Starting dashboard containers..."
 
     # Check if already running
-    if docker ps | grep -q "$BACKEND_CONTAINER"; then
+    if docker ps | grep -q "$CONTAINER"; then
         print_warning "Dashboard is already running"
         print_info "Use './dashboard.sh restart' to restart or './dashboard.sh stop' to stop"
         exit 0
@@ -139,34 +138,18 @@ start_dashboard() {
     print_step "Waiting for services to be healthy..."
     sleep 5
 
-    # Check backend health
+    # Check dashboard health (combined frontend + backend)
     local max_attempts=30
     local attempt=0
     while [ $attempt -lt $max_attempts ]; do
-        if curl -s http://localhost:8080/health > /dev/null 2>&1; then
-            print_success "Backend is healthy"
-            break
-        fi
-        attempt=$((attempt + 1))
-        if [ $attempt -eq $max_attempts ]; then
-            print_error "Backend failed to become healthy"
-            print_info "Check logs with: ./dashboard.sh logs backend"
-            exit 1
-        fi
-        sleep 1
-    done
-
-    # Check frontend health
-    attempt=0
-    while [ $attempt -lt $max_attempts ]; do
         if curl -s http://localhost:3001/health > /dev/null 2>&1; then
-            print_success "Frontend is healthy"
+            print_success "Dashboard is healthy"
             break
         fi
         attempt=$((attempt + 1))
         if [ $attempt -eq $max_attempts ]; then
-            print_error "Frontend failed to become healthy"
-            print_info "Check logs with: ./dashboard.sh logs frontend"
+            print_error "Dashboard failed to become healthy"
+            print_info "Check logs with: ./dashboard.sh logs"
             exit 1
         fi
         sleep 1
@@ -176,9 +159,8 @@ start_dashboard() {
     print_success "Dashboard started successfully!"
     echo ""
     print_info "Access the dashboard at:"
-    echo -e "  ${GREEN}Frontend:${NC}  http://localhost:3001"
-    echo -e "  ${GREEN}Backend:${NC}   http://localhost:8080"
-    echo -e "  ${GREEN}API Docs:${NC}  http://localhost:8080/docs"
+    echo -e "  ${GREEN}Dashboard:${NC} http://localhost:3001"
+    echo -e "  ${GREEN}API Docs:${NC}  http://localhost:3001/docs"
     echo ""
     print_info "View logs with: ./dashboard.sh logs"
     print_info "Stop with: ./dashboard.sh stop"
@@ -194,7 +176,7 @@ stop_dashboard() {
     check_prerequisites
 
     # Check if running
-    if ! docker ps | grep -q "$BACKEND_CONTAINER"; then
+    if ! docker ps | grep -q "$CONTAINER"; then
         print_warning "Dashboard is not running"
         exit 0
     fi
@@ -223,16 +205,10 @@ restart_dashboard() {
     sleep 5
 
     # Quick health check
-    if curl -s http://localhost:8080/health > /dev/null 2>&1; then
-        print_success "Backend is healthy"
-    else
-        print_error "Backend health check failed"
-    fi
-
     if curl -s http://localhost:3001/health > /dev/null 2>&1; then
-        print_success "Frontend is healthy"
+        print_success "Dashboard is healthy"
     else
-        print_error "Frontend health check failed"
+        print_error "Dashboard health check failed"
     fi
 
     echo ""
@@ -263,19 +239,12 @@ show_status() {
     print_step "Health Checks:"
     echo ""
 
-    # Backend
-    if curl -s http://localhost:8080/health > /dev/null 2>&1; then
-        backend_status=$(curl -s http://localhost:8080/health | grep -o '"status":"[^"]*"' | cut -d'"' -f4 || echo "unknown")
-        print_success "Backend: http://localhost:8080 - Status: $backend_status"
-    else
-        print_error "Backend: http://localhost:8080 - Not responding"
-    fi
-
-    # Frontend
+    # Dashboard (combined frontend + backend)
     if curl -s http://localhost:3001/health > /dev/null 2>&1; then
-        print_success "Frontend: http://localhost:3001 - Healthy"
+        dashboard_status=$(curl -s http://localhost:3001/health | grep -o '"status":"[^"]*"' | cut -d'"' -f4 || echo "unknown")
+        print_success "Dashboard: http://localhost:3001 - Status: $dashboard_status"
     else
-        print_error "Frontend: http://localhost:3001 - Not responding"
+        print_error "Dashboard: http://localhost:3001 - Not responding"
     fi
 
     echo ""
@@ -287,12 +256,12 @@ show_status() {
     if docker ps | grep -q "kato"; then
         print_success "KATO container is running"
 
-        # Test KATO health from backend if it's running
-        if docker ps | grep -q "$BACKEND_CONTAINER"; then
-            if docker exec $BACKEND_CONTAINER curl -s http://kato:8000/health > /dev/null 2>&1; then
-                print_success "Backend can reach KATO API"
+        # Test KATO health from dashboard if it's running
+        if docker ps | grep -q "$CONTAINER"; then
+            if docker exec $CONTAINER curl -s http://kato:8000/health > /dev/null 2>&1; then
+                print_success "Dashboard can reach KATO API"
             else
-                print_error "Backend cannot reach KATO API"
+                print_error "Dashboard cannot reach KATO API"
             fi
         fi
     else
@@ -310,24 +279,20 @@ view_logs() {
 
     if [ -z "$service" ]; then
         # Show all logs
-        print_info "Showing logs for all services (Ctrl+C to exit)..."
+        print_info "Showing dashboard logs (Ctrl+C to exit)..."
         echo ""
         $COMPOSE_CMD logs -f
     else
+        # For backward compatibility, accept "backend" or "frontend" but show same logs
         case $service in
-            backend)
-                print_info "Showing backend logs (Ctrl+C to exit)..."
+            backend|frontend|dashboard)
+                print_info "Showing dashboard logs (Ctrl+C to exit)..."
                 echo ""
-                $COMPOSE_CMD logs -f dashboard-backend
-                ;;
-            frontend)
-                print_info "Showing frontend logs (Ctrl+C to exit)..."
-                echo ""
-                $COMPOSE_CMD logs -f dashboard-frontend
+                $COMPOSE_CMD logs -f dashboard
                 ;;
             *)
                 print_error "Invalid service: $service"
-                print_info "Valid options: backend, frontend"
+                print_info "Note: Dashboard now runs as a single combined container"
                 exit 1
                 ;;
         esac
@@ -402,30 +367,22 @@ exec_cmd() {
 
     check_prerequisites
 
+    # For backward compatibility, accept "backend", "frontend", or "dashboard"
     case $service in
-        backend)
+        backend|frontend|dashboard)
             if [ -z "$cmd" ]; then
                 # Open shell
-                print_info "Opening shell in backend container..."
-                docker exec -it $BACKEND_CONTAINER bash
+                print_info "Opening shell in dashboard container..."
+                docker exec -it $CONTAINER sh
             else
                 # Run command
-                docker exec $BACKEND_CONTAINER $cmd
-            fi
-            ;;
-        frontend)
-            if [ -z "$cmd" ]; then
-                # Open shell
-                print_info "Opening shell in frontend container..."
-                docker exec -it $FRONTEND_CONTAINER sh
-            else
-                # Run command
-                docker exec $FRONTEND_CONTAINER $cmd
+                docker exec $CONTAINER $cmd
             fi
             ;;
         *)
             print_error "Invalid service: $service"
-            print_info "Valid options: backend, frontend"
+            print_info "Note: Dashboard now runs as a single combined container"
+            print_info "Valid options: dashboard, backend (alias), frontend (alias)"
             exit 1
             ;;
     esac
@@ -437,22 +394,13 @@ test_endpoints() {
     print_info "Testing dashboard endpoints..."
     echo ""
 
-    # Backend health
-    print_step "Testing backend health..."
-    if response=$(curl -s http://localhost:8080/health); then
-        print_success "Backend health: OK"
+    # Dashboard health
+    print_step "Testing dashboard health..."
+    if response=$(curl -s http://localhost:3001/health); then
+        print_success "Dashboard health: OK"
         echo "  Response: $response"
     else
-        print_error "Backend health check failed"
-    fi
-    echo ""
-
-    # Frontend health
-    print_step "Testing frontend health..."
-    if curl -s http://localhost:3001/health > /dev/null 2>&1; then
-        print_success "Frontend health: OK"
-    else
-        print_error "Frontend health check failed"
+        print_error "Dashboard health check failed"
     fi
     echo ""
 
@@ -460,28 +408,28 @@ test_endpoints() {
     print_step "Testing API endpoints..."
 
     # System metrics
-    if curl -s http://localhost:8080/api/v1/system/metrics > /dev/null 2>&1; then
+    if curl -s http://localhost:3001/api/v1/system/metrics > /dev/null 2>&1; then
         print_success "System metrics: OK"
     else
         print_error "System metrics: Failed"
     fi
 
     # Session count
-    if curl -s http://localhost:8080/api/v1/sessions/count > /dev/null 2>&1; then
+    if curl -s http://localhost:3001/api/v1/sessions/count > /dev/null 2>&1; then
         print_success "Session count: OK"
     else
         print_error "Session count: Failed"
     fi
 
     # Analytics overview
-    if curl -s http://localhost:8080/api/v1/analytics/overview > /dev/null 2>&1; then
+    if curl -s http://localhost:3001/api/v1/analytics/overview > /dev/null 2>&1; then
         print_success "Analytics overview: OK"
     else
         print_error "Analytics overview: Failed"
     fi
 
     echo ""
-    print_info "API documentation available at: http://localhost:8080/docs"
+    print_info "API documentation available at: http://localhost:3001/docs"
     echo ""
 }
 
@@ -514,18 +462,18 @@ show_version() {
     echo ""
 
     # Check if running from registry or local build
-    if docker ps | grep -q "$BACKEND_CONTAINER"; then
+    if docker ps | grep -q "$CONTAINER"; then
         print_step "Checking running container version..."
-        local container_version=$(docker inspect $BACKEND_CONTAINER --format '{{index .Config.Labels "org.opencontainers.image.version"}}' 2>/dev/null || echo "unknown")
+        local container_version=$(docker inspect $CONTAINER --format '{{index .Config.Labels "org.opencontainers.image.version"}}' 2>/dev/null || echo "unknown")
         if [ "$container_version" != "unknown" ] && [ -n "$container_version" ]; then
             print_success "Running container version: $container_version"
 
-            local git_commit=$(docker inspect $BACKEND_CONTAINER --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' 2>/dev/null || echo "unknown")
+            local git_commit=$(docker inspect $CONTAINER --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' 2>/dev/null || echo "unknown")
             if [ "$git_commit" != "unknown" ] && [ -n "$git_commit" ]; then
                 print_info "Git commit: $git_commit"
             fi
 
-            local build_date=$(docker inspect $BACKEND_CONTAINER --format '{{index .Config.Labels "org.opencontainers.image.created"}}' 2>/dev/null || echo "unknown")
+            local build_date=$(docker inspect $CONTAINER --format '{{index .Config.Labels "org.opencontainers.image.created"}}' 2>/dev/null || echo "unknown")
             if [ "$build_date" != "unknown" ] && [ -n "$build_date" ]; then
                 print_info "Build date: $build_date"
             fi
@@ -603,7 +551,7 @@ update_dashboard() {
     echo ""
 
     # Check if dashboard is running
-    if docker ps | grep -q "$BACKEND_CONTAINER"; then
+    if docker ps | grep -q "$CONTAINER"; then
         print_step "Stopping current dashboard..."
         docker-compose -f docker-compose.prod.yml down
         print_success "Stopped"
@@ -622,7 +570,7 @@ update_dashboard() {
         print_success "Dashboard is healthy"
 
         # Show new version
-        local new_version=$(docker inspect $BACKEND_CONTAINER --format '{{index .Config.Labels "org.opencontainers.image.version"}}' 2>/dev/null || echo "unknown")
+        local new_version=$(docker inspect $CONTAINER --format '{{index .Config.Labels "org.opencontainers.image.version"}}' 2>/dev/null || echo "unknown")
         if [ "$new_version" != "unknown" ] && [ -n "$new_version" ]; then
             print_info "Now running version: $new_version"
         fi
@@ -647,11 +595,11 @@ show_help() {
     echo "  stop                 Stop the dashboard"
     echo "  restart              Restart the dashboard"
     echo "  status               Show dashboard status and health"
-    echo "  logs [service]       View logs (backend|frontend|all)"
-    echo "  build [--no-cache]   Build containers from source"
+    echo "  logs                 View dashboard logs"
+    echo "  build [--no-cache]   Build container from source"
     echo "  pull                 Pull latest base images for building"
     echo "  clean                Stop and remove all containers and volumes"
-    echo "  exec <service>       Open shell in container (backend|frontend)"
+    echo "  exec dashboard       Open shell in dashboard container"
     echo "  test                 Test all endpoints"
     echo "  version              Show version information"
     echo "  pull-registry [tag]  Pull dashboard image from registry (default: latest)"
@@ -660,17 +608,16 @@ show_help() {
     echo ""
     echo "Examples:"
     echo "  ./dashboard.sh start               # Start the dashboard"
-    echo "  ./dashboard.sh logs backend        # View backend logs"
-    echo "  ./dashboard.sh exec backend        # Open shell in backend container"
+    echo "  ./dashboard.sh logs                # View dashboard logs"
+    echo "  ./dashboard.sh exec dashboard      # Open shell in dashboard container"
     echo "  ./dashboard.sh build --no-cache    # Rebuild from scratch"
     echo "  ./dashboard.sh version             # Show current version"
     echo "  ./dashboard.sh pull-registry 0.1.0 # Pull specific version from registry"
     echo "  ./dashboard.sh update              # Update to latest from registry"
     echo ""
     echo "URLs:"
-    echo "  Frontend:  http://localhost:3001"
-    echo "  Backend:   http://localhost:8080"
-    echo "  API Docs:  http://localhost:8080/docs"
+    echo "  Dashboard: http://localhost:3001"
+    echo "  API Docs:  http://localhost:3001/docs"
     echo ""
     echo "Registry:"
     echo "  Images:    $REGISTRY/$IMAGE_NAME"

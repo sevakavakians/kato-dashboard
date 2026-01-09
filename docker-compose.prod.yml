@@ -26,7 +26,7 @@ services:
     # image: ghcr.io/sevakavakians/kato-dashboard:0.1    # Auto-receive patch updates
     # image: ghcr.io/sevakavakians/kato-dashboard:0      # Auto-receive minor updates
 
-    container_name: kato-dashboard-backend
+    container_name: kato-dashboard
     environment:
       # The combined image runs both services internally:
       # - Nginx on port 3001 (serves frontend + proxies to backend)

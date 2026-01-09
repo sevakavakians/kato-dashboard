@@ -1,87 +1,84 @@
 # KATO Dashboard - Docker Compose Configuration (Development)
 #
-# This configuration is optimized for local development with separate backend and frontend containers.
-# For production deployments using the combined image from the registry, see docker-compose.prod.yml
+# This configuration builds the combined image locally from source for development.
+# For production deployments using the pre-built image from the registry, see docker-compose.prod.yml
 #
 # Usage:
 #   Development (local build):  docker-compose up -d
 #   Production (registry):      docker-compose -f docker-compose.prod.yml up -d
 #
-# To use a specific version from the registry, see docker-compose.prod.yml
+# The combined image contains both frontend (served by Nginx) and backend (FastAPI)
+# in a single container managed by supervisor.
 
 services:
-  # Backend API
-  dashboard-backend:
+  # Combined Dashboard (Frontend + Backend)
+  dashboard:
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile
-    container_name: kato-dashboard-backend
+      args:
+        - VERSION=dev
+        - GIT_COMMIT=${GIT_COMMIT:-dev}
+        - BUILD_DATE=${BUILD_DATE:-$(date -u +"%Y-%m-%dT%H:%M:%SZ")}
+    container_name: kato-dashboard
     environment:
-      - HOST=0.0.0.0
-      - PORT=8080
-      - LOG_LEVEL=INFO
+      # The combined image runs both services internally:
+      # - Nginx on port 3001 (serves frontend + proxies to backend)
+      # - FastAPI backend on internal port 8080
+
       # KATO Service
       - KATO_API_URL=http://kato:8000
+
       # Database connections
       - DATABASE_READ_ONLY=false
       - QDRANT_URL=http://qdrant:6333
       - REDIS_URL=redis://redis:6379
+
       # ClickHouse Configuration (Hybrid Architecture)
       - CLICKHOUSE_HOST=clickhouse
       - CLICKHOUSE_HTTP_PORT=8123
       - CLICKHOUSE_DB=kato
       - CLICKHOUSE_USER=default
       - CLICKHOUSE_PASSWORD=
+
       # Hybrid Architecture Mode (ClickHouse + Redis for patterns)
       - USE_HYBRID_PATTERNS=true
+
       # Security
       - ADMIN_USERNAME=admin
       - ADMIN_PASSWORD=changeme
       - SECRET_KEY=change-this-in-production-to-something-secure
+
       # CORS
       - CORS_ORIGINS=http://localhost:3001,http://localhost:8080
+
       # Cache
       - CACHE_TTL_SECONDS=30
       - MAX_CACHE_SIZE=1000
+
     ports:
-      - "8080:8080"
+      # The combined image exposes only port 3001 (Nginx)
+      # Nginx serves frontend and proxies /api/* to backend
+      - "3001:3001"
+
     volumes:
       # Mount Docker socket for container stats monitoring
-      # RW mode required for Docker API access (not for chmod)
+      # RW mode required for Docker API access
       # Security Note: This gives container access to Docker daemon
       # Consider using Docker socket proxy in production for restricted access
       - /var/run/docker.sock:/var/run/docker.sock:rw
+
     networks:
       - kato-network
+
     restart: unless-stopped
+
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/api/v1/health', timeout=5).read()"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
-
-  # Frontend
-  dashboard-frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: kato-dashboard-frontend
-    environment:
-      - VITE_API_URL=http://localhost:8080
-    ports:
-      - "3001:3000"
-    networks:
-      - kato-network
-    depends_on:
-      - dashboard-backend
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3000/health"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
-      start_period: 10s
 
 networks:
   kato-network:

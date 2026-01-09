@@ -167,9 +167,9 @@ npm run lint
 # Direct docker-compose (if needed)
 docker-compose up -d
 docker-compose build --no-cache
-docker-compose logs -f dashboard-backend
+docker-compose logs -f dashboard
 docker-compose down
-docker-compose restart dashboard-backend
+docker-compose restart dashboard
 ```
 
 ## Project Structure
@@ -581,7 +581,7 @@ Extended with registry operations for production deployments:
 
 #### Development (Local Build)
 
-Uses separate backend and frontend containers built from source:
+Uses combined container built from source:
 
 ```bash
 # Build from source
@@ -592,9 +592,9 @@ docker-compose build
 ```
 
 **Docker Compose**: `docker-compose.yml`
-- Backend: `./backend/Dockerfile`
-- Frontend: `./frontend/Dockerfile`
-- Optimized for local development
+- Combined image: `./Dockerfile` (builds both frontend and backend)
+- Container name: `kato-dashboard`
+- Optimized for local development with live builds
 
 #### Production (Registry Image)
 
@@ -879,7 +879,7 @@ npm run test:coverage
 - Check that KATO is running: `docker ps | grep kato`
 - Verify network exists: `docker network ls | grep kato-network`
 - Check environment variables in `.env`
-- View logs: `docker-compose logs dashboard-backend`
+- View logs: `docker-compose logs dashboard`
 
 ### Frontend build fails
 - Delete `node_modules` and reinstall: `rm -rf node_modules && npm install`
@@ -887,10 +887,10 @@ npm run test:coverage
 - Clear Vite cache: `rm -rf node_modules/.vite`
 
 ### Can't connect to databases
-- Verify dashboard is on KATO network: `docker inspect kato-dashboard-backend`
+- Verify dashboard is on KATO network: `docker inspect kato-dashboard`
 - Test database connectivity from container:
 ```bash
-docker exec -it kato-dashboard-backend python -c "from app.db.clickhouse import get_clickhouse_client; import asyncio; asyncio.run(get_clickhouse_client().ping())"
+docker exec -it kato-dashboard python -c "from app.db.clickhouse import get_clickhouse_client; import asyncio; asyncio.run(get_clickhouse_client().ping())"
 ```
 
 ### CORS errors in browser
@@ -1012,10 +1012,9 @@ npm run lint                      # Lint code
 # Docker (Direct)
 docker-compose up -d --build      # Build and start
 docker-compose down -v            # Stop and remove volumes
-docker-compose restart <service>  # Restart service
-docker-compose logs -f <service>  # Follow logs
-docker exec -it kato-dashboard-backend bash
-docker exec -it kato-dashboard-frontend sh
+docker-compose restart dashboard  # Restart service
+docker-compose logs -f dashboard  # Follow logs
+docker exec -it kato-dashboard sh
 
 # Database Direct Access
 docker exec -it kato-clickhouse clickhouse-client

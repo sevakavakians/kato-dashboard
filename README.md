@@ -57,9 +57,8 @@ make start
 
 ### 4. Access Dashboard
 
-- **Frontend**: http://localhost:3001
-- **Backend API**: http://localhost:8080
-- **API Docs**: http://localhost:8080/docs
+- **Dashboard**: http://localhost:3001
+- **API Docs**: http://localhost:3001/docs
 
 ## Management Script
 
@@ -74,10 +73,10 @@ The dashboard includes a management script for easy control:
 - `stop` - Stop the dashboard
 - `restart` - Restart the dashboard
 - `status` - Show status and health checks
-- `logs [backend|frontend]` - View logs
-- `build [--no-cache]` - Build containers
+- `logs` - View dashboard logs
+- `build [--no-cache]` - Build container
 - `clean` - Remove all containers and volumes
-- `exec <service>` - Open shell in container
+- `exec dashboard` - Open shell in container
 - `test` - Test all endpoints
 - `help` - Show help message
 
@@ -225,19 +224,19 @@ VITE_API_URL=http://localhost:8080
 
 1. Ensure KATO is running: `docker ps | grep kato`
 2. Check network: `docker network ls | grep kato-network`
-3. Verify dashboard is on the same network: `docker inspect kato-dashboard-backend`
+3. Verify dashboard is on the same network: `docker inspect kato-dashboard`
 
 ### Database connection errors
 
 1. Check that ClickHouse, Qdrant, and Redis are accessible from the dashboard network
 2. Verify connection URLs in environment variables
-3. Check logs: `docker-compose logs dashboard-backend`
+3. Check logs: `docker-compose logs dashboard`
 
-### Frontend can't reach backend
+### Dashboard not accessible
 
-1. Verify backend is running: `curl http://localhost:8080/health`
-2. Check CORS settings in backend `.env`
-3. Check browser console for CORS errors
+1. Verify dashboard is running: `curl http://localhost:3001/health`
+2. Check container logs: `./dashboard.sh logs`
+3. Ensure port 3001 is not blocked by firewall
 
 ## Performance
 
