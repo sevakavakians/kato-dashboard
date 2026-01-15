@@ -1106,7 +1106,7 @@ export default function Databases() {
   // Delete knowledgebase mutation (hybrid ClickHouse + Redis)
   const deleteKnowledgebaseMutation = useMutation({
     mutationFn: (kbId: string) => apiClient.deleteKnowledgebase(kbId),
-    onSuccess: (data) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['hybridProcessors'] })
       queryClient.invalidateQueries({ queryKey: ['hybridPatterns'] })
       queryClient.invalidateQueries({ queryKey: ['hybridProcessorStats'] })
