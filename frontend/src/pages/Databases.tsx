@@ -1112,11 +1112,9 @@ export default function Databases() {
       queryClient.invalidateQueries({ queryKey: ['hybridProcessorStats'] })
       setSelectedProcessor(null)
       setSelectedPatterns(new Set())
-      alert(
-        `Successfully deleted knowledgebase:\n` +
-        `- ${data.clickhouse_deleted} patterns from ClickHouse\n` +
-        `- ${data.redis_keys_deleted} Redis keys`
-      )
+      // Note: Alert removed from here to prevent cascading alerts during bulk deletion
+      // Single deletions show alert in handleDeleteKnowledgebase
+      // Bulk deletions show summary alert in handleBulkDeleteKnowledgebases
     },
     onError: (error: any) => {
       alert(`Failed to delete knowledgebase: ${error.response?.data?.detail || error.message}`)
@@ -1195,7 +1193,17 @@ export default function Databases() {
     )
 
     if (finalConfirm) {
-      await deleteKnowledgebaseMutation.mutateAsync(kbId)
+      try {
+        const data = await deleteKnowledgebaseMutation.mutateAsync(kbId)
+        // Show success alert for single deletion
+        alert(
+          `✓ Successfully deleted knowledgebase:\n` +
+          `- ${data.clickhouse_deleted} patterns from ClickHouse\n` +
+          `- ${data.redis_keys_deleted} Redis keys`
+        )
+      } catch (error) {
+        // Error alert is handled by mutation's onError
+      }
     }
   }
 
