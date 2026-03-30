@@ -1362,3 +1362,28 @@ async def get_symbol_statistics_for_kb(kb_id: str):
     except Exception as e:
         logger.error(f"Failed to get symbol statistics for {kb_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/databases/symbols/{kb_id}/affinity/{symbol_name}")
+async def get_symbol_affinity(kb_id: str, symbol_name: str):
+    """
+    Get affinity data for a specific symbol.
+
+    Args:
+        kb_id: Knowledge base identifier
+        symbol_name: Symbol name to get affinity for
+
+    Returns:
+        Dictionary with symbol affinity (emotive name -> running sum)
+    """
+    try:
+        from app.db.symbol_stats import get_symbols_affinity_batch
+        affinity_map = await get_symbols_affinity_batch(kb_id, [symbol_name])
+        return {
+            'kb_id': kb_id,
+            'symbol': symbol_name,
+            'affinity': affinity_map.get(symbol_name, {})
+        }
+    except Exception as e:
+        logger.error(f"Failed to get affinity for {symbol_name}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

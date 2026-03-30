@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Database, Search, TrendingUp, BarChart3, ChevronLeft, ChevronRight, ArrowUpDown } from 'lucide-react'
 import { apiClient } from '../lib/api'
@@ -8,6 +8,7 @@ interface SymbolData {
   frequency: number
   pattern_member_frequency: number
   freq_pmf_ratio: number
+  affinity: Record<string, number> | null
 }
 
 interface ProcessorInfo {
@@ -51,13 +52,13 @@ export default function SymbolsBrowser() {
   const pageSize = 100
 
   // Debounce search term
-  useState(() => {
+  useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(searchTerm)
       setPage(0) // Reset to first page on search
     }, 500)
     return () => clearTimeout(timer)
-  })
+  }, [searchTerm])
 
   // Fetch processors with symbol data
   const { data: processorsData, isLoading: processorsLoading, error: processorsError } = useQuery<{ processors: ProcessorInfo[] }>({
@@ -67,11 +68,11 @@ export default function SymbolsBrowser() {
   })
 
   // Auto-select first processor if available
-  useState(() => {
+  useEffect(() => {
     if (processorsData?.processors?.length && !selectedProcessor) {
       setSelectedProcessor(processorsData.processors[0].kb_id)
     }
-  })
+  }, [processorsData, selectedProcessor])
 
   // Fetch symbols for selected processor
   const { data: symbolsData, isLoading: symbolsLoading, error: symbolsError } = useQuery<SymbolsResponse>({
@@ -328,6 +329,9 @@ export default function SymbolsBrowser() {
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase tracking-wider">
                               Distribution
                             </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                              Affinity
+                            </th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -362,6 +366,34 @@ export default function SymbolsBrowser() {
                                       style={{ width: `${Math.max(barWidth, 2)}%` }}
                                     />
                                   </div>
+                                </td>
+                                <td className="px-6 py-4">
+                                  {symbol.affinity ? (
+                                    <div className="flex flex-wrap gap-1">
+                                      {Object.entries(symbol.affinity)
+                                        .sort(([, a], [, b]) => b - a)
+                                        .slice(0, 5)
+                                        .map(([emotive, value]) => (
+                                          <span
+                                            key={emotive}
+                                            className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200"
+                                            title={`${emotive}: ${value.toFixed(2)}`}
+                                          >
+                                            {emotive}
+                                            <span className="ml-1 text-indigo-600 dark:text-indigo-300">
+                                              {value.toFixed(1)}
+                                            </span>
+                                          </span>
+                                        ))}
+                                      {Object.keys(symbol.affinity).length > 5 && (
+                                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                                          +{Object.keys(symbol.affinity).length - 5}
+                                        </span>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span className="text-gray-400 dark:text-gray-600">---</span>
+                                  )}
                                 </td>
                               </tr>
                             )

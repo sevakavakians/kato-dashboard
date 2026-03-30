@@ -200,6 +200,14 @@ async def get_symbols_paginated(
         # Apply pagination
         paginated_symbols = symbols[skip:skip + limit]
 
+        # Fetch affinity for this page's symbols
+        symbol_names = [s['name'] for s in paginated_symbols]
+        affinity_map = await get_symbols_affinity_batch(kb_id, symbol_names)
+
+        # Enrich symbols with affinity data
+        for symbol in paginated_symbols:
+            symbol['affinity'] = affinity_map.get(symbol['name'], None)
+
         return {
             'kb_id': kb_id,
             'symbols': paginated_symbols,
@@ -301,6 +309,51 @@ async def get_symbol_statistics(kb_id: str) -> Dict[str, Any]:
             'avg_pattern_member_frequency': 0,
             'error': str(e)
         }
+
+
+async def get_symbols_affinity_batch(
+    kb_id: str,
+    symbol_names: List[str]
+) -> Dict[str, Dict[str, float]]:
+    """
+    Batch fetch affinity data for a list of symbols using Redis pipeline.
+
+    Redis key schema: {kb_id}:affinity:{symbol} (HASH)
+        field = emotive_name (e.g., "utility", "energy")
+        value = running sum (float, via HINCRBYFLOAT)
+
+    Args:
+        kb_id: Knowledge base identifier
+        symbol_names: List of symbol names to fetch affinity for
+
+    Returns:
+        Dict mapping symbol_name -> {emotive_name: float_value, ...}
+        Symbols with no affinity data are omitted from the result.
+    """
+    if not symbol_names:
+        return {}
+
+    try:
+        client = await get_redis_client()
+
+        pipe = client.pipeline()
+        for name in symbol_names:
+            pipe.hgetall(f"{kb_id}:affinity:{name}")
+
+        results = await pipe.execute()
+
+        affinity_map = {}
+        for name, hash_data in zip(symbol_names, results):
+            if hash_data:  # Non-empty hash
+                affinity_map[name] = {
+                    k: float(v) for k, v in hash_data.items()
+                }
+
+        return affinity_map
+
+    except Exception as e:
+        logger.error(f"Failed to batch fetch affinity for {kb_id}: {e}")
+        return {}
 
 
 async def get_all_symbols(kb_id: str) -> Dict[str, Dict[str, Any]]:
