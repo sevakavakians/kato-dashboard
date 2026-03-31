@@ -104,21 +104,29 @@ kato-dashboard/
 │   └── requirements.txt
 ├── frontend/                   # React frontend
 │   ├── src/
+│   │   ├── types/
+│   │   │   └── knowledgebase.ts # Shared KB/Pattern/Symbol/Vector interfaces
 │   │   ├── components/
-│   │   │   └── Layout.tsx      # Sidebar navigation with connection status
+│   │   │   ├── Layout.tsx       # Sidebar navigation with connection status
+│   │   │   ├── KnowledgebaseSidebar.tsx # KB list with checkboxes + bulk delete
+│   │   │   ├── PatternsPanel.tsx  # Patterns sub-tab for selected KB
+│   │   │   ├── VectorsPanel.tsx   # Vectors sub-tab for selected KB
+│   │   │   ├── PatternDetailModal.tsx  # Pattern detail/edit modal
+│   │   │   └── SymbolsBrowser.tsx  # Symbol stats browser (accepts kbId prop)
 │   │   ├── pages/
 │   │   │   ├── Dashboard.tsx   # Real-time metrics (WebSocket)
 │   │   │   ├── Sessions.tsx    # Session management
 │   │   │   ├── SessionDetail.tsx # Session details and STM
-│   │   │   ├── Databases.tsx   # MongoDB & Redis browser
-│   │   │   ├── VectorBrowser.tsx # Qdrant vector visualization
+│   │   │   ├── Knowledgebases.tsx # KB-centric management (route: /knowledgebases)
+│   │   │   ├── Redis.tsx       # Standalone Redis browser (route: /redis)
 │   │   │   └── Analytics.tsx   # Advanced analytics dashboard
 │   │   ├── lib/
 │   │   │   ├── api.ts          # Axios API client
 │   │   │   ├── websocket.ts    # WebSocket client with auto-reconnect
 │   │   │   └── utils.ts        # Utility functions
 │   │   ├── hooks/
-│   │   │   └── useWebSocket.ts # WebSocket React hook
+│   │   │   ├── useWebSocket.ts # WebSocket React hook
+│   │   │   └── useUnifiedKBList.ts # Merges 3 processor endpoints into KB list
 │   │   └── main.tsx            # Entry point
 │   ├── Dockerfile              # Multi-stage build with Nginx
 │   ├── nginx.conf              # Production config
@@ -130,9 +138,29 @@ kato-dashboard/
 └── planning-docs/              # Project management docs
 ```
 
-## Current Status: Production Infrastructure COMPLETE - Docker Versioning ✅
+## Current Status: UI Refactor COMPLETE - Knowledgebases Page Restructure ✅
 
-### Latest Changes: Docker Versioning and Release Automation - COMPLETE (2025-12-17)
+### Latest Changes: Knowledgebases Page Restructure - COMPLETE (2026-03-31)
+
+**Decompose Monolithic Databases.tsx and Introduce KB-Centric UX**
+- **Problem Solved**: 1780-line monolithic Databases.tsx unmaintainable; UI organized by database type, not by KB identity
+- **Solution Implemented**: 8 focused files following single-responsibility principle
+  - `types/knowledgebase.ts`: Shared TypeScript interfaces for all KB entities
+  - `hooks/useUnifiedKBList.ts`: Merges 3 processor endpoints into unified KB list
+  - `components/KnowledgebaseSidebar.tsx`: KB list with checkboxes and bulk delete
+  - `components/PatternsPanel.tsx`: Patterns view scoped to selected KB
+  - `components/VectorsPanel.tsx`: Vectors view scoped to selected KB
+  - `components/PatternDetailModal.tsx`: Pattern detail/edit modal extracted
+  - `pages/Knowledgebases.tsx`: Main page composing sidebar + 3 sub-tabs
+  - `pages/Redis.tsx`: Redis browser as standalone page at `/redis`
+- **Navigation Changes**: "Database Management" → "Knowledgebases" at `/knowledgebases`; "Redis" added at `/redis`; redirect from `/databases` in place
+- **SymbolsBrowser**: Extended with optional `kbId` prop (backward compatible)
+- **All Existing Functionality Preserved**: CRUD, bulk delete, search, sort, pagination, pattern editing, double-confirmation patterns
+- **Code Metrics**: 8 files created, 3 modified, 1 deleted (Databases.tsx)
+- **Build**: 0 TypeScript errors
+- **Status**: ✅ COMPLETE
+
+### Previous Changes: Docker Versioning and Release Automation - COMPLETE (2025-12-17)
 
 **Docker Container Versioning, Building, and Publishing System**
 - **Problem Solved**: kato-dashboard lacked production release infrastructure

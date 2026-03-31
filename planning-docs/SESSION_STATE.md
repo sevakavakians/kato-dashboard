@@ -1,15 +1,15 @@
 # Session State
 
-**Last Updated**: 2025-12-17
-**Current Phase**: Production Infrastructure - Docker Versioning COMPLETE ✅
-**Session Focus**: Docker Container Versioning and Release Automation System Complete
+**Last Updated**: 2026-03-31
+**Current Phase**: UI Refactor - Knowledgebases Page Restructure COMPLETE ✅
+**Session Focus**: Decomposed monolithic Databases.tsx into modular Knowledgebases page with KB-centric UX
 
 ## Current Status
 
-### Progress: Docker Versioning and Release Automation - COMPLETE ✅
-Complete Docker container versioning, building, and publishing system implemented (2025-12-17).
-Semantic versioning system with automated synchronization across version files.
-Multi-stage combined Dockerfile, GHCR integration, complete release automation.
+### Progress: Knowledgebases Page Restructure - COMPLETE ✅
+Decomposed 1780-line monolithic Databases.tsx into focused component architecture (2026-03-31).
+KB-centric UX replaces database-type tab model. 7 new files created. Redis extracted as standalone page.
+Docker versioning and release automation system previously completed (2025-12-17).
 Dashboard v2.0 Phase 4 (Hierarchical Graph) previously completed.
 Pattern editing (Phase 1) COMPLETE. WebSocket phases (1-4) complete. KB deletion complete.
 
@@ -21,6 +21,16 @@ Pattern editing (Phase 1) COMPLETE. WebSocket phases (1-4) complete. KB deletion
 - Timeline: 9-12 hours estimated, 11.5 hours actual (within target)
 
 ### Current Task
+**Knowledgebases Page Restructure - COMPLETE ✅**
+- Status: COMPLETE - Build passes, all functionality preserved ✅
+- Goal: Decompose monolithic Databases.tsx and introduce KB-centric UX
+- Files Created: 8 new files (types, hook, 4 components, 2 pages)
+- Files Modified: 3 (App.tsx, Layout.tsx, SymbolsBrowser.tsx)
+- Files Deleted: 1 (Databases.tsx - replaced)
+- TypeScript Errors: 0
+- Completion Archive: /Users/sevakavakians/PROGRAMMING/kato-dashboard/planning-docs/completed/refactors/knowledgebases-page-restructure.md
+
+### Previous Task (COMPLETE)
 **Docker Versioning and Release Automation System - COMPLETE ✅**
 - Status: COMPLETE - Ready for production releases ✅
 - Goal: Production-ready Docker versioning, building, and publishing system
@@ -75,31 +85,16 @@ Pattern editing (Phase 1) COMPLETE. WebSocket phases (1-4) complete. KB deletion
 18. ✅ Document completed full-stack work
 
 ### Next Immediate Action
-**Docker Versioning System Complete - Ready for First Release**
+**Knowledgebases Restructure Complete - Choose Next Focus**
 
 **Current Status**:
-- Docker versioning and release automation system COMPLETE ✅
-- All automation scripts tested and validated ✅
-- Documentation comprehensive and ready ✅
-- Version 0.1.0 established as initial pre-release ✅
-- Multi-stage Dockerfile builds successfully ✅
+- Knowledgebases page restructure COMPLETE ✅
+- KB-centric UX deployed, all existing functionality preserved ✅
+- Monolithic Databases.tsx decomposed into 8 focused files ✅
+- Redis extracted as standalone `/redis` page ✅
+- Build clean (0 TypeScript errors) ✅
 
-**Prerequisites for First GHCR Release**:
-1. Create GitHub Personal Access Token with `write:packages` scope
-2. Authenticate: `echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin`
-3. Enable GitHub Packages in repository settings
-
-**First Release Commands**:
-```bash
-# Automated release
-./container-manager.sh patch "Initial public release"
-
-# Or manual
-./bump-version.sh patch
-./build-and-push.sh
-```
-
-**Next Phases After Release**:
+**Next Phases After Restructure**:
 
 **Option A: Continue Dashboard v2.0 Feature Roadmap**
 - Phase 5: Export Functionality (CSV/JSON/GraphML) - 6-8h estimated
@@ -130,7 +125,22 @@ Pattern editing (Phase 1) COMPLETE. WebSocket phases (1-4) complete. KB deletion
 - Primary: /Users/sevakavakians/PROGRAMMING/kato-dashboard
 - Related: /Users/sevakavakians/PROGRAMMING/kato (main KATO system)
 
-### Recently Modified Files (Latest Session - 2025-10-11)
+### Recently Modified Files (Latest Session - 2026-03-31)
+**Knowledgebases Page Restructure**:
+- /Users/sevakavakians/PROGRAMMING/kato-dashboard/frontend/src/types/knowledgebase.ts (NEW - shared TS interfaces)
+- /Users/sevakavakians/PROGRAMMING/kato-dashboard/frontend/src/hooks/useUnifiedKBList.ts (NEW - merged KB list hook)
+- /Users/sevakavakians/PROGRAMMING/kato-dashboard/frontend/src/components/KnowledgebaseSidebar.tsx (NEW - KB list + bulk delete)
+- /Users/sevakavakians/PROGRAMMING/kato-dashboard/frontend/src/components/PatternsPanel.tsx (NEW - patterns sub-tab)
+- /Users/sevakavakians/PROGRAMMING/kato-dashboard/frontend/src/components/VectorsPanel.tsx (NEW - vectors sub-tab)
+- /Users/sevakavakians/PROGRAMMING/kato-dashboard/frontend/src/components/PatternDetailModal.tsx (NEW - pattern detail/edit modal)
+- /Users/sevakavakians/PROGRAMMING/kato-dashboard/frontend/src/pages/Knowledgebases.tsx (NEW - main KB page)
+- /Users/sevakavakians/PROGRAMMING/kato-dashboard/frontend/src/pages/Redis.tsx (NEW - standalone Redis page)
+- /Users/sevakavakians/PROGRAMMING/kato-dashboard/frontend/src/App.tsx (new routes + /databases redirect)
+- /Users/sevakavakians/PROGRAMMING/kato-dashboard/frontend/src/components/Layout.tsx (nav: Knowledgebases + Redis items)
+- /Users/sevakavakians/PROGRAMMING/kato-dashboard/frontend/src/components/SymbolsBrowser.tsx (added optional kbId prop)
+- DELETED: /Users/sevakavakians/PROGRAMMING/kato-dashboard/frontend/src/pages/Databases.tsx (replaced)
+
+### Previously Modified Files (Session - 2025-10-11)
 **WebSocket Phase 2 Implementation**:
 - /Users/sevakavakians/PROGRAMMING/kato-dashboard/backend/app/services/session_events.py (NEW FILE, ~115 lines)
 - /Users/sevakavakians/PROGRAMMING/kato-dashboard/backend/app/services/websocket.py (session event integration, ~25 lines added)
@@ -183,7 +193,28 @@ Pattern editing (Phase 1) COMPLETE. WebSocket phases (1-4) complete. KB deletion
 
 ## Recent Accomplishments
 
-### Latest Feature: Docker Versioning and Release Automation System (2025-12-17) - COMPLETE ✅
+### Latest Refactor: Knowledgebases Page Restructure (2026-03-31) - COMPLETE ✅
+
+**Refactor**: Decompose monolithic Databases.tsx and introduce KB-centric UX model
+- **Problem Solved**: Single 1780-line Databases.tsx component was unmaintainable; UX organized by database type rather than by knowledge unit
+- **Solution Implemented**: 8 focused files with single responsibilities
+  - Shared types extracted to `types/knowledgebase.ts`
+  - Data merging logic extracted to `hooks/useUnifiedKBList.ts`
+  - 4 focused components: KnowledgebaseSidebar, PatternsPanel, VectorsPanel, PatternDetailModal
+  - 2 new pages: Knowledgebases (KB-centric) and Redis (standalone)
+- **Navigation Changes**: `/databases` → `/knowledgebases` (redirect in place), Redis at `/redis`
+- **SymbolsBrowser**: Updated with optional `kbId` prop for scoped embedding (backward compatible)
+- **UX Model Change**: Users now select a KB and see Patterns / Symbols / Vectors sub-tabs for that KB
+- **Functionality**: 100% of existing CRUD, bulk delete, search, sort, pagination, pattern editing preserved
+- **Build**: 0 TypeScript errors
+
+**Code Metrics**:
+- Files Created: 8 (1 type file, 1 hook, 4 components, 2 pages)
+- Files Modified: 3 (App.tsx, Layout.tsx, SymbolsBrowser.tsx)
+- Files Deleted: 1 (Databases.tsx replaced)
+- Largest new file: ~350 lines (PatternsPanel.tsx, vs 1780 prior monolith)
+
+### Previous Feature: Docker Versioning and Release Automation System (2025-12-17) - COMPLETE ✅
 
 **Feature**: Complete Docker container versioning, building, and publishing system
 - **Problem Solved**: kato-dashboard lacked production release infrastructure

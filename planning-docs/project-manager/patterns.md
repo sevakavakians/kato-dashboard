@@ -494,4 +494,42 @@ This file will evolve as the project grows:
 
 ---
 
-Last updated: 2025-10-10
+## Component Decomposition Pattern (2026-03-31)
+
+### Trigger
+Monolithic `Databases.tsx` reached 1780 lines. Edits became risky and navigation model did not match the user's mental model of knowledge management.
+
+### Pattern Applied: Extract-by-Responsibility
+
+**Before**: One large page file containing all types, hooks, sub-components, and rendering logic for 4 unrelated database views.
+
+**After**: Dedicated files for each concern:
+1. Types file (`types/knowledgebase.ts`) - all shared interfaces, no logic
+2. Data hook (`hooks/useUnifiedKBList.ts`) - data aggregation only, no rendering
+3. Sidebar component - list + selection + bulk action UI only
+4. Panel components (Patterns, Vectors) - one view each
+5. Modal component - isolated interaction flow
+6. Page component - composes all of the above
+
+**Key Decision**: The page component now contains almost no logic itself - it only composes. All logic lives in the hook or the individual components.
+
+### Sizing Guideline Confirmed
+- Files growing past ~500 lines in this React codebase tend to benefit from decomposition
+- The threshold for "consider extracting" is when a component has 3+ distinct visual sections
+- The threshold for "must extract" is when a file has 1000+ lines or has 2+ unrelated concerns
+
+### UX Architecture Lesson
+The old "tab by database type" model (Knowledgebase | Symbols | Qdrant | Redis) forced users to mentally map across tabs to see all views of one KB. The new "select KB, then sub-tabs" model matches how users think: "I want to look at KB X - show me its patterns, symbols, and vectors."
+
+When the navigation structure matches the user's conceptual model, you get a better product. When it reflects the implementation's internal database topology, users get confused.
+
+### Backward Compatibility Pattern
+The `SymbolsBrowser` component was updated with an **optional** prop (`kbId?: string`):
+- If provided: scoped to that KB
+- If absent: original global behavior
+
+This is the correct approach for extending a component without breaking existing callsites. Never add a required prop to an existing component used in multiple places.
+
+---
+
+Last updated: 2026-03-31
