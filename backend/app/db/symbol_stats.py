@@ -1,9 +1,10 @@
 """
 Symbol Statistics Module - Redis-backed symbol frequency data
 
-Provides access to KATO's symbols_kb data stored in Redis:
-- symbol:freq:{symbol} - Raw frequency count
-- symbol:pmf:{symbol} - Pattern member frequency
+Provides access to KATO's symbol data stored in Redis as HASH keys:
+- {kb_id}:symbols:freq  (HASH) - symbol_name -> frequency count
+- {kb_id}:symbols:pmf   (HASH) - symbol_name -> pattern member frequency
+- {kb_id}:affinity:{symbol} (HASH) - emotive_name -> running sum (float)
 
 Symbols represent individual tokens/characters that make up patterns.
 """
@@ -17,12 +18,13 @@ logger = logging.getLogger("kato_dashboard.db.symbol_stats")
 # In-memory cache for symbol data (kb_id -> {'symbols': [...], 'timestamp': time})
 _symbol_cache: Dict[str, Dict[str, Any]] = {}
 CACHE_TTL_SECONDS = 300  # 5 minutes
-MAX_SYMBOLS_TO_LOAD = 100000  # Limit to prevent memory/timeout issues
 
 
 async def get_processors_with_symbols() -> List[Dict[str, Any]]:
     """
     Get list of processors (kb_ids) that have symbol data in Redis.
+
+    Scans for keys matching *:symbols:freq (HASH keys, one per kb_id).
 
     Returns:
         List of processor dictionaries with kb_id and symbol count
@@ -30,33 +32,37 @@ async def get_processors_with_symbols() -> List[Dict[str, Any]]:
     try:
         client = await get_redis_client()
 
-        # Scan once and count symbols per kb_id
-        kb_symbol_counts = {}
+        kb_ids = []
         cursor = 0
 
         logger.info("Scanning for processors with symbol data...")
 
         while True:
-            cursor, keys = await client.scan(cursor, match="*:symbol:freq:*", count=5000)
-
+            cursor, keys = await client.scan(cursor, match="*:symbols:freq", count=5000)
             for key in keys:
-                # Extract kb_id from key: "kb_id:symbol:freq:symbol_name"
-                parts = key.split(":symbol:freq:")
-                if len(parts) == 2:
-                    kb_id = parts[0]
-                    kb_symbol_counts[kb_id] = kb_symbol_counts.get(kb_id, 0) + 1
-
+                # Extract kb_id from key: "{kb_id}:symbols:freq"
+                if key.endswith(":symbols:freq"):
+                    kb_id = key[:-len(":symbols:freq")]
+                    kb_ids.append(kb_id)
             if cursor == 0:
                 break
 
-        # Build processor list
+        # Get symbol counts for each kb_id
         processors = []
-        for kb_id in sorted(kb_symbol_counts.keys()):
-            processors.append({
-                'kb_id': kb_id,
-                'processor_id': kb_id,  # For consistency with patterns API
-                'symbols_count': kb_symbol_counts[kb_id]
-            })
+        if kb_ids:
+            pipe = client.pipeline()
+            for kb_id in kb_ids:
+                pipe.hlen(f"{kb_id}:symbols:freq")
+            counts = await pipe.execute()
+
+            for kb_id, count in zip(sorted(kb_ids), sorted(zip(kb_ids, counts))):
+                processors.append({
+                    'kb_id': count[0],
+                    'processor_id': count[0],
+                    'symbols_count': count[1]
+                })
+            # Sort by kb_id
+            processors.sort(key=lambda p: p['kb_id'])
 
         logger.info(f"Found {len(processors)} processors with symbol data: {[p['kb_id'] for p in processors]}")
         return processors
@@ -69,6 +75,10 @@ async def get_processors_with_symbols() -> List[Dict[str, Any]]:
 async def _load_all_symbols(kb_id: str) -> List[Dict[str, Any]]:
     """
     Load all symbols for a kb_id from Redis (cached).
+
+    Reads from two HASH keys:
+    - {kb_id}:symbols:freq  -> {symbol_name: frequency, ...}
+    - {kb_id}:symbols:pmf   -> {symbol_name: pmf, ...}
 
     Returns:
         List of symbol dictionaries
@@ -84,61 +94,30 @@ async def _load_all_symbols(kb_id: str) -> List[Dict[str, Any]]:
     logger.info(f"Loading symbols for {kb_id} from Redis (cache miss or expired)...")
     client = await get_redis_client()
 
-    # Scan symbol keys (with limit to prevent timeouts on huge datasets)
-    symbol_keys = []
-    cursor = 0
-    pattern = f"{kb_id}:symbol:freq:*"
-    truncated = False
+    # Fetch both hashes in a single pipeline
+    pipe = client.pipeline()
+    pipe.hgetall(f"{kb_id}:symbols:freq")
+    pipe.hgetall(f"{kb_id}:symbols:pmf")
+    freq_hash, pmf_hash = await pipe.execute()
 
-    while True:
-        cursor, keys = await client.scan(cursor, match=pattern, count=5000)
-        symbol_keys.extend(keys)
+    if not freq_hash:
+        logger.info(f"No symbol frequency data found for {kb_id}")
+        _symbol_cache[kb_id] = {'symbols': [], 'timestamp': now}
+        return []
 
-        # Stop if we hit the limit
-        if len(symbol_keys) >= MAX_SYMBOLS_TO_LOAD:
-            logger.warning(f"Hit max symbols limit ({MAX_SYMBOLS_TO_LOAD}) for {kb_id}, truncating...")
-            symbol_keys = symbol_keys[:MAX_SYMBOLS_TO_LOAD]
-            truncated = True
-            break
-
-        if cursor == 0:
-            break
-
-    logger.info(f"Found {len(symbol_keys)} symbol keys for {kb_id}{' (truncated)' if truncated else ''}")
-
-    # Fetch values in batches
+    # Build symbol list by merging freq and pmf data
     symbols = []
-    batch_size = 1000
+    for symbol_name, freq_value in freq_hash.items():
+        freq = int(freq_value) if freq_value else 0
+        pmf_value = pmf_hash.get(symbol_name)
+        pmf = int(pmf_value) if pmf_value else 0
 
-    for i in range(0, len(symbol_keys), batch_size):
-        batch_keys = symbol_keys[i:i+batch_size]
-        pipe = client.pipeline()
-        symbol_names = []
-
-        for freq_key in batch_keys:
-            symbol_name = freq_key.split(f"{kb_id}:symbol:freq:", 1)[1]
-            symbol_names.append(symbol_name)
-            pmf_key = f"{kb_id}:symbol:pmf:{symbol_name}"
-            pipe.get(freq_key)
-            pipe.get(pmf_key)
-
-        results = await pipe.execute()
-
-        for j, symbol_name in enumerate(symbol_names):
-            freq_value = results[j * 2]
-            pmf_value = results[j * 2 + 1]
-            freq = int(freq_value) if freq_value else 0
-            pmf = int(pmf_value) if pmf_value else 0
-
-            symbols.append({
-                'name': symbol_name,
-                'frequency': freq,
-                'pattern_member_frequency': pmf,
-                'freq_pmf_ratio': round(freq / pmf, 2) if pmf > 0 else 0
-            })
-
-        if i % 10000 == 0 and i > 0:
-            logger.info(f"  Loaded {i}/{len(symbol_keys)} symbols...")
+        symbols.append({
+            'name': symbol_name,
+            'frequency': freq,
+            'pattern_member_frequency': pmf,
+            'freq_pmf_ratio': round(freq / pmf, 2) if pmf > 0 else 0
+        })
 
     logger.info(f"Loaded {len(symbols)} symbols for {kb_id}, caching for {CACHE_TTL_SECONDS}s")
 
@@ -162,7 +141,7 @@ async def get_symbols_paginated(
     """
     Get paginated, sorted symbol data for a kb_id.
 
-    Uses in-memory caching to avoid re-scanning Redis on every request.
+    Uses in-memory caching to avoid re-reading Redis on every request.
 
     Args:
         kb_id: Knowledge base identifier
@@ -183,7 +162,13 @@ async def get_symbols_paginated(
         if search:
             symbols = [s for s in all_symbols if search.lower() in s['name'].lower()]
         else:
-            symbols = all_symbols
+            symbols = list(all_symbols)
+
+        # For affinity sorting, we need to fetch all affinities before sorting
+        all_affinity_map = {}
+        if sort_by == 'affinity':
+            symbol_names = [s['name'] for s in symbols]
+            all_affinity_map = await get_symbols_affinity_batch(kb_id, symbol_names)
 
         # Sort symbols
         if sort_by == 'frequency':
@@ -194,15 +179,26 @@ async def get_symbols_paginated(
             symbols.sort(key=lambda s: s['name'], reverse=(sort_order == -1))
         elif sort_by == 'ratio' or sort_by == 'freq_pmf_ratio':
             symbols.sort(key=lambda s: s['freq_pmf_ratio'], reverse=(sort_order == -1))
+        elif sort_by == 'affinity':
+            symbols.sort(
+                key=lambda s: sum(all_affinity_map.get(s['name'], {}).values()),
+                reverse=(sort_order == -1)
+            )
 
         total = len(symbols)
 
         # Apply pagination
         paginated_symbols = symbols[skip:skip + limit]
 
-        # Fetch affinity for this page's symbols
-        symbol_names = [s['name'] for s in paginated_symbols]
-        affinity_map = await get_symbols_affinity_batch(kb_id, symbol_names)
+        # Fetch affinity for this page's symbols (use existing map if we already fetched all)
+        if all_affinity_map:
+            affinity_map = {
+                s['name']: all_affinity_map[s['name']]
+                for s in paginated_symbols if s['name'] in all_affinity_map
+            }
+        else:
+            symbol_names = [s['name'] for s in paginated_symbols]
+            affinity_map = await get_symbols_affinity_batch(kb_id, symbol_names)
 
         # Enrich symbols with affinity data
         for symbol in paginated_symbols:
@@ -241,54 +237,35 @@ async def get_symbol_statistics(kb_id: str) -> Dict[str, Any]:
         Dictionary with aggregate stats
     """
     try:
-        client = await get_redis_client()
-        pattern = f"{kb_id}:symbol:freq:*"
+        # Use cached symbol data
+        all_symbols = await _load_all_symbols(kb_id)
 
-        total_symbols = 0
-        total_frequency = 0
-        total_pmf = 0
-        max_freq = 0
-        max_pmf = 0
-        top_symbols_by_freq = []
+        if not all_symbols:
+            return {
+                'kb_id': kb_id,
+                'total_symbols': 0,
+                'avg_frequency': 0,
+                'avg_pattern_member_frequency': 0,
+                'max_frequency': 0,
+                'max_pattern_member_frequency': 0,
+                'top_symbols': []
+            }
 
-        cursor = 0
+        total_symbols = len(all_symbols)
+        total_frequency = sum(s['frequency'] for s in all_symbols)
+        total_pmf = sum(s['pattern_member_frequency'] for s in all_symbols)
+        max_freq = max(s['frequency'] for s in all_symbols)
+        max_pmf = max(s['pattern_member_frequency'] for s in all_symbols)
 
-        logger.info(f"Computing statistics for {kb_id}")
-
-        while True:
-            cursor, keys = await client.scan(cursor, match=pattern, count=1000)
-
-            for freq_key in keys:
-                symbol_name = freq_key.split(f"{kb_id}:symbol:freq:", 1)[1] if f"{kb_id}:symbol:freq:" in freq_key else freq_key
-                pmf_key = f"{kb_id}:symbol:pmf:{symbol_name}"
-
-                freq_value = await client.get(freq_key)
-                pmf_value = await client.get(pmf_key)
-
-                freq = int(freq_value) if freq_value else 0
-                pmf = int(pmf_value) if pmf_value else 0
-
-                total_symbols += 1
-                total_frequency += freq
-                total_pmf += pmf
-                max_freq = max(max_freq, freq)
-                max_pmf = max(max_pmf, pmf)
-
-                # Track top 10 symbols by frequency
-                top_symbols_by_freq.append((symbol_name, freq, pmf))
-
-            if cursor == 0:
-                break
-
-        # Sort and get top 10
-        top_symbols_by_freq.sort(key=lambda x: x[1], reverse=True)
+        # Top 10 by frequency
+        sorted_by_freq = sorted(all_symbols, key=lambda s: s['frequency'], reverse=True)
         top_10 = [
-            {'name': name, 'frequency': freq, 'pattern_member_frequency': pmf}
-            for name, freq, pmf in top_symbols_by_freq[:10]
+            {'name': s['name'], 'frequency': s['frequency'], 'pattern_member_frequency': s['pattern_member_frequency']}
+            for s in sorted_by_freq[:10]
         ]
 
-        avg_freq = round(total_frequency / total_symbols, 2) if total_symbols > 0 else 0
-        avg_pmf = round(total_pmf / total_symbols, 2) if total_symbols > 0 else 0
+        avg_freq = round(total_frequency / total_symbols, 2)
+        avg_pmf = round(total_pmf / total_symbols, 2)
 
         return {
             'kb_id': kb_id,
@@ -380,7 +357,7 @@ async def get_all_symbols(kb_id: str) -> Dict[str, Dict[str, Any]]:
                 symbols_dict[symbol_name] = {
                     'frequency': symbol.get('frequency', 0),
                     'pmf': symbol.get('pattern_member_frequency', 0),
-                    'ratio': symbol.get('ratio', 0.0)
+                    'ratio': symbol.get('freq_pmf_ratio', 0.0)
                 }
 
         return symbols_dict

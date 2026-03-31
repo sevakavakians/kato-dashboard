@@ -1319,7 +1319,7 @@ async def get_symbols_for_kb(
     kb_id: str,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
-    sort_by: str = Query('frequency', regex='^(frequency|pmf|name|ratio)$'),
+    sort_by: str = Query('frequency', regex='^(frequency|pmf|pattern_member_frequency|name|ratio|freq_pmf_ratio|affinity)$'),
     sort_order: int = Query(-1, ge=-1, le=1),
     search: Optional[str] = Query(None)
 ):

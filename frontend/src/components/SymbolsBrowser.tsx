@@ -40,16 +40,30 @@ interface StatsResponse {
   }>
 }
 
-type SortField = 'frequency' | 'pattern_member_frequency' | 'name' | 'freq_pmf_ratio'
+type SortField = 'frequency' | 'pattern_member_frequency' | 'name' | 'freq_pmf_ratio' | 'affinity'
 
-export default function SymbolsBrowser() {
-  const [selectedProcessor, setSelectedProcessor] = useState<string | null>(null)
+interface SymbolsBrowserProps {
+  kbId?: string
+}
+
+export default function SymbolsBrowser({ kbId }: SymbolsBrowserProps = {}) {
+  const [selectedProcessor, setSelectedProcessor] = useState<string | null>(kbId || null)
   const [page, setPage] = useState(0)
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [sortBy, setSortBy] = useState<SortField>('frequency')
   const [sortOrder, setSortOrder] = useState<1 | -1>(-1)
   const pageSize = 100
+
+  // Sync with kbId prop
+  useEffect(() => {
+    if (kbId) {
+      setSelectedProcessor(kbId)
+      setPage(0)
+      setSearchTerm('')
+      setDebouncedSearch('')
+    }
+  }, [kbId])
 
   // Debounce search term
   useEffect(() => {
@@ -60,19 +74,20 @@ export default function SymbolsBrowser() {
     return () => clearTimeout(timer)
   }, [searchTerm])
 
-  // Fetch processors with symbol data
+  // Fetch processors with symbol data (skip when kbId prop is provided)
   const { data: processorsData, isLoading: processorsLoading, error: processorsError } = useQuery<{ processors: ProcessorInfo[] }>({
     queryKey: ['symbolProcessors'],
     queryFn: () => apiClient.getSymbolProcessors(),
-    refetchInterval: 30000, // Refresh every 30 seconds
+    refetchInterval: 30000,
+    enabled: !kbId,
   })
 
-  // Auto-select first processor if available
+  // Auto-select first processor if available (only when no kbId prop)
   useEffect(() => {
-    if (processorsData?.processors?.length && !selectedProcessor) {
+    if (!kbId && processorsData?.processors?.length && !selectedProcessor) {
       setSelectedProcessor(processorsData.processors[0].kb_id)
     }
-  }, [processorsData, selectedProcessor])
+  }, [kbId, processorsData, selectedProcessor])
 
   // Fetch symbols for selected processor
   const { data: symbolsData, isLoading: symbolsLoading, error: symbolsError } = useQuery<SymbolsResponse>({
@@ -134,26 +149,28 @@ export default function SymbolsBrowser() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-          <Database className="w-6 h-6" />
-          Symbol Statistics
-        </h2>
-      </div>
+      {/* Header (hidden when used as embedded panel) */}
+      {!kbId && (
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+            <Database className="w-6 h-6" />
+            Symbol Statistics
+          </h2>
+        </div>
+      )}
 
-      {/* Processor Selection */}
-      {processorsLoading ? (
+      {/* Processor Selection (hidden when kbId prop is provided) */}
+      {!kbId && processorsLoading ? (
         <div className="text-center py-8 text-gray-500 dark:text-gray-400">
           Loading processors...
         </div>
-      ) : processorsError ? (
+      ) : !kbId && processorsError ? (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
           <p className="text-red-800 dark:text-red-200">
             Error loading processors: {processorsError instanceof Error ? processorsError.message : 'Unknown error'}
           </p>
         </div>
-      ) : !processorsData?.processors?.length ? (
+      ) : !kbId && !processorsData?.processors?.length ? (
         <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-8 text-center">
           <Database className="w-12 h-12 mx-auto mb-4 text-yellow-600 dark:text-yellow-400" />
           <h3 className="text-lg font-semibold text-yellow-900 dark:text-yellow-100 mb-2">
@@ -165,26 +182,28 @@ export default function SymbolsBrowser() {
         </div>
       ) : (
         <>
-          {/* Processor Dropdown */}
-          <div className="flex items-center gap-4">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              Processor:
-            </label>
-            <select
-              value={selectedProcessor || ''}
-              onChange={(e) => {
-                setSelectedProcessor(e.target.value)
-                setPage(0)
-              }}
-              className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-            >
-              {processorsData.processors.map((p) => (
-                <option key={p.kb_id} value={p.kb_id}>
-                  {p.kb_id} ({p.symbols_count.toLocaleString()} symbols)
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Processor Dropdown (hidden when kbId prop provided) */}
+          {!kbId && processorsData?.processors && (
+            <div className="flex items-center gap-4">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Processor:
+              </label>
+              <select
+                value={selectedProcessor || ''}
+                onChange={(e) => {
+                  setSelectedProcessor(e.target.value)
+                  setPage(0)
+                }}
+                className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+              >
+                {processorsData.processors.map((p) => (
+                  <option key={p.kb_id} value={p.kb_id}>
+                    {p.kb_id} ({p.symbols_count.toLocaleString()} symbols)
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Statistics Cards */}
           {selectedProcessor && (
@@ -271,6 +290,7 @@ export default function SymbolsBrowser() {
                       <option value="pattern_member_frequency">PMF</option>
                       <option value="name">Name</option>
                       <option value="freq_pmf_ratio">Ratio</option>
+                      <option value="affinity">Affinity</option>
                     </select>
                     <button
                       onClick={() => setSortOrder(sortOrder === -1 ? 1 : -1)}

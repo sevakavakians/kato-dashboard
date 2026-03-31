@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from 'react-router-dom'
-import { Activity, Database, BarChart3, Users, Box, Wifi, WifiOff, Bell, Network } from 'lucide-react'
+import { Activity, Database, BarChart3, Users, Box, Wifi, WifiOff, Bell, Network, Server } from 'lucide-react'
 import { useWebSocket, useWebSocketStatus } from '../hooks/useWebSocket'
 import { AlertProvider, useAlertSidebar } from '../contexts/AlertContext'
 import AlertHistorySidebar from './AlertHistorySidebar'
@@ -18,7 +18,8 @@ function LayoutContent() {
   const navigation = [
     { name: 'Dashboard', href: '/', icon: Activity },
     { name: 'Sessions', href: '/sessions', icon: Users },
-    { name: 'Databases', href: '/databases', icon: Database },
+    { name: 'Knowledgebases', href: '/knowledgebases', icon: Database },
+    { name: 'Redis', href: '/redis', icon: Server },
     { name: 'Vectors', href: '/vectors', icon: Box },
     { name: 'Analytics', href: '/analytics', icon: BarChart3 },
     { name: 'Hierarchy', href: '/hierarchy', icon: Network },
