@@ -240,10 +240,19 @@ async def get_symbol_statistics(kb_id: str) -> Dict[str, Any]:
         # Use cached symbol data
         all_symbols = await _load_all_symbols(kb_id)
 
+        # Get total pattern count from ClickHouse for coverage calculation
+        total_patterns = 0
+        try:
+            from app.db.clickhouse import get_pattern_count
+            total_patterns = await get_pattern_count(kb_id)
+        except Exception as e:
+            logger.warning(f"Could not get pattern count for {kb_id}: {e}")
+
         if not all_symbols:
             return {
                 'kb_id': kb_id,
                 'total_symbols': 0,
+                'total_patterns': total_patterns,
                 'avg_frequency': 0,
                 'avg_pattern_member_frequency': 0,
                 'max_frequency': 0,
@@ -270,6 +279,7 @@ async def get_symbol_statistics(kb_id: str) -> Dict[str, Any]:
         return {
             'kb_id': kb_id,
             'total_symbols': total_symbols,
+            'total_patterns': total_patterns,
             'avg_frequency': avg_freq,
             'avg_pattern_member_frequency': avg_pmf,
             'max_frequency': max_freq,

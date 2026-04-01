@@ -29,6 +29,7 @@ interface SymbolsResponse {
 interface StatsResponse {
   kb_id: string
   total_symbols: number
+  total_patterns: number
   avg_frequency: number
   avg_pattern_member_frequency: number
   max_frequency: number
@@ -118,9 +119,9 @@ export default function SymbolsBrowser({ kbId }: SymbolsBrowserProps = {}) {
     return Math.ceil(symbolsData.total / pageSize)
   }, [symbolsData])
 
-  // Max PMF for pattern coverage bar visualization
-  const maxPmf = useMemo(() => {
-    return statsData?.max_pattern_member_frequency || 1
+  // Total patterns for coverage percentage calculation
+  const totalPatterns = useMemo(() => {
+    return statsData?.total_patterns || 1
   }, [statsData])
 
   const handleSortChange = (field: SortField) => {
@@ -355,7 +356,8 @@ export default function SymbolsBrowser({ kbId }: SymbolsBrowserProps = {}) {
                         </thead>
                         <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                           {symbolsData.symbols.map((symbol, idx) => {
-                            const coverageWidth = (symbol.pattern_member_frequency / maxPmf) * 100
+                            const coveragePct = (symbol.pattern_member_frequency / totalPatterns) * 100
+                            const coverageWidth = Math.min(coveragePct, 100)
                             return (
                               <tr key={`${symbol.name}-${idx}`} className="hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors">
                                 <td className="px-6 py-4 whitespace-nowrap">
@@ -386,8 +388,8 @@ export default function SymbolsBrowser({ kbId }: SymbolsBrowserProps = {}) {
                                         style={{ width: `${Math.max(coverageWidth, 2)}%` }}
                                       />
                                     </div>
-                                    <span className="text-xs text-gray-500 dark:text-gray-400 w-8 text-right flex-shrink-0">
-                                      {symbol.pattern_member_frequency}
+                                    <span className="text-xs text-gray-500 dark:text-gray-400 w-12 text-right flex-shrink-0">
+                                      {coveragePct.toFixed(1)}%
                                     </span>
                                   </div>
                                 </td>
