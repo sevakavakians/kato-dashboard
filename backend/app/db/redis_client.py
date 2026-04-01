@@ -636,9 +636,20 @@ async def delete_kb_metadata(kb_id: str) -> int:
     try:
         total_deleted = 0
 
+        # Escape glob special characters in kb_id for Redis SCAN MATCH patterns.
+        # KB names can contain [ ] which Redis interprets as character classes.
+        escaped_kb_id = (
+            kb_id
+            .replace("\\", "\\\\")
+            .replace("*", "\\*")
+            .replace("?", "\\?")
+            .replace("[", "\\[")
+            .replace("]", "\\]")
+        )
+
         # Delete all keys for each metadata type
         for key_type in ['frequency', 'emotives', 'metadata', 'symbols', 'affinity']:
-            pattern = f"{kb_id}:{key_type}:*"
+            pattern = f"{escaped_kb_id}:{key_type}:*"
 
             # Scan for keys matching pattern
             keys_to_delete = []
