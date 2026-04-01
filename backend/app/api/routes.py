@@ -4,6 +4,7 @@ API Routes for KATO Dashboard
 import logging
 from typing import Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel
 
 from app.services.kato_api import get_kato_client
 from app.services import analytics
@@ -616,6 +617,104 @@ async def flush_redis_cache(pattern: Optional[str] = None):
         raise
     except Exception as e:
         logger.error(f"Failed to flush cache: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# ClickHouse Browser Endpoints (Generic Schema Discovery & Query)
+# ============================================================================
+
+@router.get("/databases/clickhouse/databases")
+async def list_clickhouse_databases():
+    """List all ClickHouse databases."""
+    try:
+        from app.db.clickhouse_browser import list_databases
+        databases = await list_databases()
+        return {"databases": databases}
+    except Exception as e:
+        logger.error(f"Failed to list ClickHouse databases: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/databases/clickhouse/databases/{database}/tables")
+async def list_clickhouse_tables(database: str):
+    """List all tables in a ClickHouse database."""
+    try:
+        from app.db.clickhouse_browser import list_tables
+        tables = await list_tables(database)
+        return {"database": database, "tables": tables, "total": len(tables)}
+    except Exception as e:
+        logger.error(f"Failed to list tables for {database}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/databases/clickhouse/databases/{database}/tables/{table}/schema")
+async def get_clickhouse_table_schema(database: str, table: str):
+    """Get column definitions for a ClickHouse table."""
+    try:
+        from app.db.clickhouse_browser import get_table_schema
+        columns = await get_table_schema(database, table)
+        return {"database": database, "table": table, "columns": columns}
+    except Exception as e:
+        logger.error(f"Failed to get schema for {database}.{table}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/databases/clickhouse/databases/{database}/tables/{table}/count")
+async def get_clickhouse_table_count(database: str, table: str):
+    """Get row count for a ClickHouse table."""
+    try:
+        from app.db.clickhouse_browser import get_table_row_count
+        count = await get_table_row_count(database, table)
+        return {"database": database, "table": table, "count": count}
+    except Exception as e:
+        logger.error(f"Failed to get row count for {database}.{table}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/databases/clickhouse/databases/{database}/tables/{table}/data")
+async def get_clickhouse_table_data(
+    database: str,
+    table: str,
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+):
+    """Get paginated data from a ClickHouse table."""
+    try:
+        from app.db.clickhouse_browser import get_table_data
+        result = await get_table_data(database, table, limit, offset)
+        return {"database": database, "table": table, **result}
+    except Exception as e:
+        logger.error(f"Failed to get data for {database}.{table}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class ClickHouseQueryRequest(BaseModel):
+    query: str
+    limit: int = 100
+    offset: int = 0
+
+
+@router.post("/databases/clickhouse/query")
+async def execute_clickhouse_query(request: ClickHouseQueryRequest):
+    """
+    Execute a read-only ClickHouse query.
+
+    Only SELECT, SHOW, DESCRIBE, and EXPLAIN statements are allowed.
+    Results are limited to the configured max rows.
+    """
+    try:
+        from app.db.clickhouse_browser import execute_readonly_query
+        result = await execute_readonly_query(
+            request.query,
+            limit=request.limit,
+            offset=request.offset,
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to execute ClickHouse query: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

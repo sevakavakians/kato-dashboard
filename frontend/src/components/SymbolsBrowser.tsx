@@ -118,11 +118,10 @@ export default function SymbolsBrowser({ kbId }: SymbolsBrowserProps = {}) {
     return Math.ceil(symbolsData.total / pageSize)
   }, [symbolsData])
 
-  // Get max frequency for bar visualization
-  const maxFrequency = useMemo(() => {
-    if (!symbolsData?.symbols.length) return 1
-    return Math.max(...symbolsData.symbols.map(s => s.frequency))
-  }, [symbolsData])
+  // Max PMF for pattern coverage bar visualization
+  const maxPmf = useMemo(() => {
+    return statsData?.max_pattern_member_frequency || 1
+  }, [statsData])
 
   const handleSortChange = (field: SortField) => {
     if (sortBy === field) {
@@ -347,7 +346,7 @@ export default function SymbolsBrowser({ kbId }: SymbolsBrowserProps = {}) {
                               Ratio
                             </th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase tracking-wider">
-                              Distribution
+                              Pattern Coverage
                             </th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-300 uppercase tracking-wider">
                               Affinity
@@ -356,7 +355,7 @@ export default function SymbolsBrowser({ kbId }: SymbolsBrowserProps = {}) {
                         </thead>
                         <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                           {symbolsData.symbols.map((symbol, idx) => {
-                            const barWidth = (symbol.frequency / maxFrequency) * 100
+                            const coverageWidth = (symbol.pattern_member_frequency / maxPmf) * 100
                             return (
                               <tr key={`${symbol.name}-${idx}`} className="hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors">
                                 <td className="px-6 py-4 whitespace-nowrap">
@@ -380,11 +379,16 @@ export default function SymbolsBrowser({ kbId }: SymbolsBrowserProps = {}) {
                                   </span>
                                 </td>
                                 <td className="px-6 py-4">
-                                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                                    <div
-                                      className="bg-blue-600 dark:bg-blue-500 h-2 rounded-full transition-all"
-                                      style={{ width: `${Math.max(barWidth, 2)}%` }}
-                                    />
+                                  <div className="flex items-center gap-2">
+                                    <div className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                                      <div
+                                        className="bg-purple-600 dark:bg-purple-500 h-2 rounded-full transition-all"
+                                        style={{ width: `${Math.max(coverageWidth, 2)}%` }}
+                                      />
+                                    </div>
+                                    <span className="text-xs text-gray-500 dark:text-gray-400 w-8 text-right flex-shrink-0">
+                                      {symbol.pattern_member_frequency}
+                                    </span>
                                   </div>
                                 </td>
                                 <td className="px-6 py-4">

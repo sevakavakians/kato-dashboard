@@ -4,8 +4,7 @@ import Dashboard from './pages/Dashboard'
 import Sessions from './pages/Sessions'
 import SessionDetail from './pages/SessionDetail'
 import Knowledgebases from './pages/Databases'
-import Redis from './pages/Redis'
-import VectorBrowser from './pages/VectorBrowser'
+import DataBrowser from './pages/DataBrowser'
 import Analytics from './pages/Analytics'
 import HierarchicalGraph from './pages/HierarchicalGraph'
 import NotFound from './pages/NotFound'
@@ -20,8 +19,9 @@ function App() {
           <Route path="sessions/:sessionId" element={<SessionDetail />} />
           <Route path="knowledgebases" element={<Knowledgebases />} />
           <Route path="databases" element={<Navigate to="/knowledgebases" replace />} />
-          <Route path="redis" element={<Redis />} />
-          <Route path="vectors" element={<VectorBrowser />} />
+          <Route path="databases-browser" element={<DataBrowser />} />
+          <Route path="redis" element={<Navigate to="/databases-browser?tab=redis" replace />} />
+          <Route path="vectors" element={<Navigate to="/databases-browser?tab=qdrant" replace />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="hierarchy" element={<HierarchicalGraph />} />
           <Route path="*" element={<NotFound />} />

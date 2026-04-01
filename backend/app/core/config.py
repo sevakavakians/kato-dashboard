@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     # Hybrid Architecture Mode (ClickHouse + Redis for patterns)
     use_hybrid_patterns: bool = Field(default=True, env="USE_HYBRID_PATTERNS")
 
+    # ClickHouse Browser (read-only query execution)
+    clickhouse_query_max_rows: int = Field(default=1000, env="CLICKHOUSE_QUERY_MAX_ROWS")
+    clickhouse_query_timeout_seconds: int = Field(default=10, env="CLICKHOUSE_QUERY_TIMEOUT_SECONDS")
+
     # Security
     admin_username: str = Field(default="admin", env="ADMIN_USERNAME")
     admin_password: str = Field(default="changeme", env="ADMIN_PASSWORD")

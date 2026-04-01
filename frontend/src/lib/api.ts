@@ -475,6 +475,55 @@ class APIClient {
     return data
   }
 
+  // ClickHouse Browser
+  async getClickHouseDatabases() {
+    const { data } = await this.client.get('/databases/clickhouse/databases')
+    return data
+  }
+
+  async getClickHouseTables(database: string) {
+    const { data } = await this.client.get(
+      `/databases/clickhouse/databases/${encodeURIComponent(database)}/tables`
+    )
+    return data
+  }
+
+  async getClickHouseTableSchema(database: string, table: string) {
+    const { data } = await this.client.get(
+      `/databases/clickhouse/databases/${encodeURIComponent(database)}/tables/${encodeURIComponent(table)}/schema`
+    )
+    return data
+  }
+
+  async getClickHouseTableData(
+    database: string,
+    table: string,
+    limit: number = 100,
+    offset: number = 0
+  ) {
+    const { data } = await this.client.get(
+      `/databases/clickhouse/databases/${encodeURIComponent(database)}/tables/${encodeURIComponent(table)}/data`,
+      { params: { limit, offset } }
+    )
+    return data
+  }
+
+  async getClickHouseTableRowCount(database: string, table: string) {
+    const { data } = await this.client.get(
+      `/databases/clickhouse/databases/${encodeURIComponent(database)}/tables/${encodeURIComponent(table)}/count`
+    )
+    return data
+  }
+
+  async executeClickHouseQuery(query: string, limit: number = 100, offset: number = 0) {
+    const { data } = await this.client.post('/databases/clickhouse/query', {
+      query,
+      limit,
+      offset,
+    })
+    return data
+  }
+
   async tracePatternGraph(
     patternName: string,
     kbId?: string,
