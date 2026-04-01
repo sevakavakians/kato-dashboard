@@ -483,8 +483,12 @@ async def delete_knowledgebase_hybrid(kb_id: str) -> Dict[str, Any]:
         # Delete all patterns from ClickHouse for this kb_id
         ch_deleted = await clickhouse.delete_kb_id(kb_id)
 
-        # Delete all Redis keys for this kb_id (pattern:{kb_id}:*)
+        # Delete all Redis keys for this kb_id (patterns, symbols, affinity)
         redis_deleted = await redis_client.delete_kb_metadata(kb_id)
+
+        # Clear symbol cache so deleted KB doesn't reappear from stale cache
+        from app.db.symbol_stats import _symbol_cache
+        _symbol_cache.pop(kb_id, None)
 
         logger.info(f"Deleted knowledgebase {kb_id}: CH={ch_deleted} patterns, Redis={redis_deleted} keys")
 

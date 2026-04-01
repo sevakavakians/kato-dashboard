@@ -617,6 +617,8 @@ async def delete_kb_metadata(kb_id: str) -> int:
     - {kb_id}:frequency:*
     - {kb_id}:emotives:*
     - {kb_id}:metadata:*
+    - {kb_id}:symbols:*
+    - {kb_id}:affinity:*
 
     Args:
         kb_id: Knowledge base identifier to delete
@@ -635,7 +637,7 @@ async def delete_kb_metadata(kb_id: str) -> int:
         total_deleted = 0
 
         # Delete all keys for each metadata type
-        for key_type in ['frequency', 'emotives', 'metadata']:
+        for key_type in ['frequency', 'emotives', 'metadata', 'symbols', 'affinity']:
             pattern = f"{kb_id}:{key_type}:*"
 
             # Scan for keys matching pattern
