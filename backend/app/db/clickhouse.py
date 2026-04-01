@@ -275,12 +275,23 @@ async def get_pattern_statistics(kb_id: str) -> Dict[str, Any]:
     result = client.query(query, parameters={'kb_id': kb_id})
     row = result.result_rows[0]
 
+    import math
+
+    def safe_float(val, default=0.0):
+        """Convert to float, replacing None/nan/inf with default."""
+        if val is None:
+            return default
+        f = float(val)
+        if math.isnan(f) or math.isinf(f):
+            return default
+        return f
+
     return {
-        'total_patterns': row[0],
-        'avg_length': float(row[1]) if row[1] else 0.0,
-        'min_length': row[2],
-        'max_length': row[3],
-        'avg_token_count': float(row[4]) if row[4] else 0.0
+        'total_patterns': row[0] or 0,
+        'avg_length': safe_float(row[1]),
+        'min_length': row[2] if row[2] is not None else 0,
+        'max_length': row[3] if row[3] is not None else 0,
+        'avg_token_count': safe_float(row[4]),
     }
 
 

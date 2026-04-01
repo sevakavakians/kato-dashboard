@@ -208,11 +208,15 @@ async def execute_readonly_query(
 
 def _serialize_rows(result_rows: list) -> list:
     """Convert ClickHouse result rows to JSON-serializable format."""
+    import math
+
     serialized = []
     for row in result_rows:
         serialized_row = []
         for val in row:
-            if isinstance(val, bytes):
+            if isinstance(val, float) and (math.isnan(val) or math.isinf(val)):
+                serialized_row.append(None)
+            elif isinstance(val, bytes):
                 # Binary data: show truncated hex
                 hex_str = val.hex()
                 if len(hex_str) > 64:
