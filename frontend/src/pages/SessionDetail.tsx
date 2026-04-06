@@ -44,7 +44,7 @@ export default function SessionDetail() {
     mutationFn: (sessionId: string) => apiClient.deleteSession(sessionId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sessions'] })
-      navigate('/sessions')
+      navigate('/databases-browser?tab=sessions')
     },
   })
 
@@ -86,7 +86,7 @@ export default function SessionDetail() {
   if (error) {
     return (
       <div>
-        <Link to="/sessions" className="inline-flex items-center text-blue-600 dark:text-blue-400 hover:underline mb-4">
+        <Link to="/databases-browser?tab=sessions" className="inline-flex items-center text-blue-600 dark:text-blue-400 hover:underline mb-4">
           <ArrowLeft className="w-4 h-4 mr-2" />
           Back to Sessions
         </Link>
@@ -107,7 +107,7 @@ export default function SessionDetail() {
     <div>
       {/* Header */}
       <div className="mb-6">
-        <Link to="/sessions" className="inline-flex items-center text-blue-600 dark:text-blue-400 hover:underline mb-4">
+        <Link to="/databases-browser?tab=sessions" className="inline-flex items-center text-blue-600 dark:text-blue-400 hover:underline mb-4">
           <ArrowLeft className="w-4 h-4 mr-2" />
           Back to Sessions
         </Link>

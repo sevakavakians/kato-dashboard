@@ -1,14 +1,16 @@
 # Session State
 
-**Last Updated**: 2026-03-31
-**Current Phase**: UI Refactor - Knowledgebases Page Restructure COMPLETE ✅
-**Session Focus**: Decomposed monolithic Databases.tsx into modular Knowledgebases page with KB-centric UX
+**Last Updated**: 2026-04-03
+**Current Phase**: UI Refactor - Sessions Page Consolidation COMPLETE ✅
+**Session Focus**: Removed standalone Sessions nav item; merged Redis Keys tab into DataBrowser as "Sessions" tab
 
 ## Current Status
 
-### Progress: Knowledgebases Page Restructure - COMPLETE ✅
-Decomposed 1780-line monolithic Databases.tsx into focused component architecture (2026-03-31).
-KB-centric UX replaces database-type tab model. 7 new files created. Redis extracted as standalone page.
+### Progress: Sessions Page Consolidation - COMPLETE ✅
+Removed standalone Sessions nav item and 495-line Sessions.tsx. Extracted Redis Keys diagnostic tab into
+new SessionsBrowser.tsx component and added it as "Sessions" tab in DataBrowser (2026-04-03).
+637 lines of dead/redundant code removed. Build passing with 0 TypeScript errors.
+Knowledgebases page restructure previously completed (2026-03-31).
 Docker versioning and release automation system previously completed (2025-12-17).
 Dashboard v2.0 Phase 4 (Hierarchical Graph) previously completed.
 Pattern editing (Phase 1) COMPLETE. WebSocket phases (1-4) complete. KB deletion complete.
@@ -21,6 +23,16 @@ Pattern editing (Phase 1) COMPLETE. WebSocket phases (1-4) complete. KB deletion
 - Timeline: 9-12 hours estimated, 11.5 hours actual (within target)
 
 ### Current Task
+**Sessions Page Consolidation - COMPLETE ✅**
+- Status: COMPLETE - Build passes, 0 TypeScript errors ✅
+- Goal: Remove low-value standalone Sessions page; relocate useful Redis Keys tab to DataBrowser
+- Files Created: 1 (SessionsBrowser.tsx)
+- Files Modified: 4 (DataBrowser.tsx, App.tsx, SessionDetail.tsx, Layout.tsx)
+- Files Deleted: 2 (Sessions.tsx 495 lines, SessionEventNotifications.tsx 142 lines)
+- TypeScript Errors: 0
+- Completion Archive: /Users/sevakavakians/PROGRAMMING/kato-dashboard/planning-docs/completed/refactors/sessions-into-databases-page.md
+
+### Previous Task (COMPLETE)
 **Knowledgebases Page Restructure - COMPLETE ✅**
 - Status: COMPLETE - Build passes, all functionality preserved ✅
 - Goal: Decompose monolithic Databases.tsx and introduce KB-centric UX
@@ -30,7 +42,7 @@ Pattern editing (Phase 1) COMPLETE. WebSocket phases (1-4) complete. KB deletion
 - TypeScript Errors: 0
 - Completion Archive: /Users/sevakavakians/PROGRAMMING/kato-dashboard/planning-docs/completed/refactors/knowledgebases-page-restructure.md
 
-### Previous Task (COMPLETE)
+### Previous Previous Task (COMPLETE)
 **Docker Versioning and Release Automation System - COMPLETE ✅**
 - Status: COMPLETE - Ready for production releases ✅
 - Goal: Production-ready Docker versioning, building, and publishing system
@@ -85,10 +97,11 @@ Pattern editing (Phase 1) COMPLETE. WebSocket phases (1-4) complete. KB deletion
 18. ✅ Document completed full-stack work
 
 ### Next Immediate Action
-**Knowledgebases Restructure Complete - Choose Next Focus**
+**Sessions Consolidation Complete - Choose Next Focus**
 
 **Current Status**:
-- Knowledgebases page restructure COMPLETE ✅
+- Sessions page consolidation COMPLETE ✅ (2026-04-03)
+- Knowledgebases page restructure COMPLETE ✅ (2026-03-31)
 - KB-centric UX deployed, all existing functionality preserved ✅
 - Monolithic Databases.tsx decomposed into 8 focused files ✅
 - Redis extracted as standalone `/redis` page ✅
@@ -125,7 +138,17 @@ Pattern editing (Phase 1) COMPLETE. WebSocket phases (1-4) complete. KB deletion
 - Primary: /Users/sevakavakians/PROGRAMMING/kato-dashboard
 - Related: /Users/sevakavakians/PROGRAMMING/kato (main KATO system)
 
-### Recently Modified Files (Latest Session - 2026-03-31)
+### Recently Modified Files (Latest Session - 2026-04-03)
+**Sessions Page Consolidation**:
+- /Users/sevakavakians/PROGRAMMING/kato-dashboard/frontend/src/components/SessionsBrowser.tsx (NEW - Redis Keys tab extracted as standalone component)
+- /Users/sevakavakians/PROGRAMMING/kato-dashboard/frontend/src/pages/DataBrowser.tsx (added Sessions tab)
+- /Users/sevakavakians/PROGRAMMING/kato-dashboard/frontend/src/App.tsx (Sessions route replaced with redirect to /databases-browser?tab=sessions)
+- /Users/sevakavakians/PROGRAMMING/kato-dashboard/frontend/src/pages/SessionDetail.tsx (back-links updated to /databases-browser?tab=sessions)
+- /Users/sevakavakians/PROGRAMMING/kato-dashboard/frontend/src/components/Layout.tsx (Sessions nav item removed, unused Users import removed)
+- DELETED: /Users/sevakavakians/PROGRAMMING/kato-dashboard/frontend/src/pages/Sessions.tsx (495 lines)
+- DELETED: /Users/sevakavakians/PROGRAMMING/kato-dashboard/frontend/src/components/SessionEventNotifications.tsx (142 lines)
+
+### Previously Modified Files (Session - 2026-03-31)
 **Knowledgebases Page Restructure**:
 - /Users/sevakavakians/PROGRAMMING/kato-dashboard/frontend/src/types/knowledgebase.ts (NEW - shared TS interfaces)
 - /Users/sevakavakians/PROGRAMMING/kato-dashboard/frontend/src/hooks/useUnifiedKBList.ts (NEW - merged KB list hook)
@@ -193,7 +216,23 @@ Pattern editing (Phase 1) COMPLETE. WebSocket phases (1-4) complete. KB deletion
 
 ## Recent Accomplishments
 
-### Latest Refactor: Knowledgebases Page Restructure (2026-03-31) - COMPLETE ✅
+### Latest Refactor: Sessions Page Consolidation (2026-04-03) - COMPLETE ✅
+
+**Refactor**: Remove low-value Sessions nav item; consolidate Redis session key browser into DataBrowser
+- **Problem Solved**: Standalone Sessions page had a dead "KATO Active Sessions" tab (redundant with Dashboard count + static text) and a "Redis Keys" tab that semantically belongs in the database browsers area
+- **Solution Implemented**: Extracted Redis Keys tab into `SessionsBrowser.tsx` component; added as "Sessions" tab in DataBrowser; replaced Sessions route with redirect; updated back-links in SessionDetail; removed nav item
+- **Navigation Change**: `/sessions` now redirects to `/databases-browser?tab=sessions`
+- **SessionDetail preserved**: `/sessions/{id}` route and detail page unchanged; back-links updated
+- **Dead code removed**: 637 lines deleted (Sessions.tsx 495 lines + SessionEventNotifications.tsx 142 lines)
+- **Build**: 0 TypeScript errors
+
+**Code Metrics**:
+- Files Created: 1 (SessionsBrowser.tsx)
+- Files Modified: 4 (DataBrowser.tsx, App.tsx, SessionDetail.tsx, Layout.tsx)
+- Files Deleted: 2 (Sessions.tsx, SessionEventNotifications.tsx)
+- Net change: significant reduction in codebase size
+
+### Previous Refactor: Knowledgebases Page Restructure (2026-03-31) - COMPLETE ✅
 
 **Refactor**: Decompose monolithic Databases.tsx and introduce KB-centric UX model
 - **Problem Solved**: Single 1780-line Databases.tsx component was unmaintainable; UX organized by database type rather than by knowledge unit

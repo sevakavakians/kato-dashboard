@@ -1,7 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import Layout from './components/Layout'
 import Dashboard from './pages/Dashboard'
-import Sessions from './pages/Sessions'
 import SessionDetail from './pages/SessionDetail'
 import Knowledgebases from './pages/Databases'
 import DataBrowser from './pages/DataBrowser'
@@ -15,7 +14,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Layout />}>
           <Route index element={<Dashboard />} />
-          <Route path="sessions" element={<Sessions />} />
+          <Route path="sessions" element={<Navigate to="/databases-browser?tab=sessions" replace />} />
           <Route path="sessions/:sessionId" element={<SessionDetail />} />
           <Route path="knowledgebases" element={<Knowledgebases />} />
           <Route path="databases" element={<Navigate to="/knowledgebases" replace />} />

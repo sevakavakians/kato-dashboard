@@ -3,11 +3,13 @@ import { HardDrive } from 'lucide-react'
 import ClickHouseBrowser from '../components/ClickHouseBrowser'
 import RedisBrowser from '../components/RedisBrowser'
 import QdrantBrowser from '../components/QdrantBrowser'
+import SessionsBrowser from '../components/SessionsBrowser'
 
 const TABS = [
   { id: 'clickhouse', label: 'ClickHouse' },
   { id: 'redis', label: 'Redis' },
   { id: 'qdrant', label: 'Qdrant' },
+  { id: 'sessions', label: 'Sessions' },
 ] as const
 
 type TabId = typeof TABS[number]['id']
@@ -29,7 +31,7 @@ export default function DataBrowser() {
           Databases
         </h1>
         <p className="text-gray-600 dark:text-gray-400 mt-2">
-          Browse and query ClickHouse, Redis, and Qdrant databases
+          Browse and query ClickHouse, Redis, Qdrant, and session keys
         </p>
       </div>
 
@@ -56,6 +58,7 @@ export default function DataBrowser() {
       {activeTab === 'clickhouse' && <ClickHouseBrowser />}
       {activeTab === 'redis' && <RedisBrowser />}
       {activeTab === 'qdrant' && <QdrantBrowser />}
+      {activeTab === 'sessions' && <SessionsBrowser />}
     </div>
   )
 }
