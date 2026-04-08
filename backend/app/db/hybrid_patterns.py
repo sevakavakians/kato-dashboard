@@ -10,6 +10,7 @@ All operations maintain kb_id isolation for multi-processor support.
 import logging
 from typing import Optional, List, Dict, Any
 from app.db import clickhouse, redis_client
+from app.db.qdrant import delete_collection as delete_qdrant_collection
 from app.core.config import get_settings
 
 logger = logging.getLogger("kato_dashboard.db.hybrid_patterns")
@@ -458,7 +459,7 @@ async def get_pattern_statistics_hybrid(kb_id: str) -> Dict[str, Any]:
 
 async def delete_knowledgebase_hybrid(kb_id: str) -> Dict[str, Any]:
     """
-    Delete entire knowledgebase from both ClickHouse + Redis (if not in read-only mode).
+    Delete entire knowledgebase from ClickHouse, Redis, and Qdrant (if not in read-only mode).
 
     This is a destructive operation that removes ALL patterns for a kb_id.
 
@@ -469,13 +470,14 @@ async def delete_knowledgebase_hybrid(kb_id: str) -> Dict[str, Any]:
         {
             'clickhouse_deleted': int,  # Patterns deleted from ClickHouse
             'redis_keys_deleted': int,  # Redis keys deleted
+            'qdrant_deleted': bool,     # Whether Qdrant collection was deleted
             'kb_id': str                # KB ID that was deleted
         }
     """
     settings = get_settings()
     if settings.database_read_only:
         logger.warning(f"Hybrid patterns in read-only mode, knowledgebase delete rejected for {kb_id}")
-        return {'clickhouse_deleted': 0, 'redis_keys_deleted': 0, 'kb_id': kb_id, 'error': 'Read-only mode enabled'}
+        return {'clickhouse_deleted': 0, 'redis_keys_deleted': 0, 'qdrant_deleted': False, 'kb_id': kb_id, 'error': 'Read-only mode enabled'}
 
     try:
         logger.info(f"Deleting entire knowledgebase: {kb_id}")
@@ -486,20 +488,29 @@ async def delete_knowledgebase_hybrid(kb_id: str) -> Dict[str, Any]:
         # Delete all Redis keys for this kb_id (patterns, symbols, affinity)
         redis_deleted = await redis_client.delete_kb_metadata(kb_id)
 
+        # Delete Qdrant vector collection for this kb_id (if it exists)
+        qdrant_collection = f"vectors_{kb_id}"
+        try:
+            qdrant_deleted = await delete_qdrant_collection(qdrant_collection)
+        except Exception as qe:
+            logger.warning(f"Failed to delete Qdrant collection {qdrant_collection}: {qe}")
+            qdrant_deleted = False
+
         # Clear symbol cache so deleted KB doesn't reappear from stale cache
         from app.db.symbol_stats import _symbol_cache
         _symbol_cache.pop(kb_id, None)
 
-        logger.info(f"Deleted knowledgebase {kb_id}: CH={ch_deleted} patterns, Redis={redis_deleted} keys")
+        logger.info(f"Deleted knowledgebase {kb_id}: CH={ch_deleted} patterns, Redis={redis_deleted} keys, Qdrant={qdrant_deleted}")
 
         return {
             'clickhouse_deleted': ch_deleted,
             'redis_keys_deleted': redis_deleted,
+            'qdrant_deleted': qdrant_deleted,
             'kb_id': kb_id
         }
     except Exception as e:
         logger.error(f"Failed to delete knowledgebase {kb_id}: {e}")
-        return {'clickhouse_deleted': 0, 'redis_keys_deleted': 0, 'kb_id': kb_id, 'error': str(e)}
+        return {'clickhouse_deleted': 0, 'redis_keys_deleted': 0, 'qdrant_deleted': False, 'kb_id': kb_id, 'error': str(e)}
 
 
 async def health_check_hybrid() -> Dict[str, Any]:

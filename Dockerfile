@@ -94,6 +94,7 @@ COPY --from=frontend-builder /app/frontend/dist /usr/share/nginx/html
 RUN cat > /etc/nginx/conf.d/default.conf <<'EOF'
 server {
     listen 3001;
+    listen [::]:3001;
     server_name localhost;
 
     # Frontend root
@@ -140,7 +141,7 @@ server {
 
     # Health check endpoint (pass to backend)
     location /health {
-        proxy_pass http://localhost:8080/health;
+        proxy_pass http://localhost:8080/api/v1/health;
     }
 
     # API docs (pass to backend)
@@ -206,7 +207,7 @@ EXPOSE 3001
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:3001/health || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:3001/health || exit 1
 
 # Store version information in image
 RUN echo "${VERSION}" > /app/VERSION && \

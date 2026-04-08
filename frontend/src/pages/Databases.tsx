@@ -69,7 +69,8 @@ export default function Knowledgebases() {
       `Patterns to delete: ${patternCount.toLocaleString()}\n\n` +
       `This will delete:\n` +
       `- All patterns from ClickHouse\n` +
-      `- All associated Redis metadata\n\n` +
+      `- All associated Redis metadata\n` +
+      `- All vector embeddings from Qdrant\n\n` +
       `Are you sure you want to continue?`
     )
 
@@ -90,7 +91,8 @@ export default function Knowledgebases() {
         alert(
           `Successfully deleted knowledgebase:\n` +
           `- ${data.clickhouse_deleted} patterns from ClickHouse\n` +
-          `- ${data.redis_keys_deleted} Redis keys`
+          `- ${data.redis_keys_deleted} Redis keys\n` +
+          `- Qdrant vectors: ${data.qdrant_deleted ? 'deleted' : 'none found'}`
         )
       } catch (_error) {
         // Error alert handled by mutation's onError
@@ -111,7 +113,7 @@ export default function Knowledgebases() {
       `DANGER: You are about to delete ${selectedKbs.size} knowledgebase(s)!\n\n` +
       `Knowledgebases:\n${selectedKbList.map(kb => `  - ${kb}`).join('\n')}\n\n` +
       `Total patterns to delete: ${totalPatterns.toLocaleString()}\n\n` +
-      `This will permanently remove ALL data from ClickHouse and Redis.\n\n` +
+      `This will permanently remove ALL data from ClickHouse, Redis, and Qdrant.\n\n` +
       `Are you sure you want to continue?`
     )
 
