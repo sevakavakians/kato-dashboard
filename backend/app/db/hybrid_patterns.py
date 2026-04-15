@@ -22,7 +22,8 @@ async def get_patterns_hybrid(
     limit: int = 100,
     sort_by: str = 'length',
     sort_order: int = -1,
-    include_metadata_flags: bool = False
+    include_metadata_flags: bool = False,
+    search: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Get patterns from ClickHouse + enrich with Redis metadata.
@@ -53,16 +54,16 @@ async def get_patterns_hybrid(
 
     # Handle frequency sorting (requires Redis first)
     if sort_by == 'frequency':
-        return await _get_patterns_sorted_by_frequency(kb_id, skip, limit, sort_order, include_metadata_flags)
+        return await _get_patterns_sorted_by_frequency(kb_id, skip, limit, sort_order, include_metadata_flags, search)
 
     # For other sorts, use ClickHouse directly
     sort_dir = 'DESC' if sort_order == -1 else 'ASC'
 
     # Get total count
-    total = await clickhouse.get_pattern_count(kb_id)
+    total = await clickhouse.get_pattern_count(kb_id, search=search)
 
     # Get patterns from ClickHouse
-    patterns_ch = await clickhouse.query_patterns(kb_id, skip, limit, sort_by, sort_dir)
+    patterns_ch = await clickhouse.query_patterns(kb_id, skip, limit, sort_by, sort_dir, search=search)
 
     # Enrich with Redis frequencies (batch fetch for performance)
     pattern_names = [p['name'] for p in patterns_ch]
@@ -117,7 +118,8 @@ async def _get_patterns_sorted_by_frequency(
     skip: int,
     limit: int,
     sort_order: int,
-    include_metadata_flags: bool = False
+    include_metadata_flags: bool = False,
+    search: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Special handling for frequency sorting.
@@ -148,7 +150,7 @@ async def _get_patterns_sorted_by_frequency(
     logger.info(f"Frequency sorting for {kb_id} - fetching all pattern names...")
 
     # Step 1: Get all pattern names (column-only query, very fast)
-    all_names = await clickhouse.get_all_pattern_names(kb_id)
+    all_names = await clickhouse.get_all_pattern_names(kb_id, search=search)
 
     logger.info(f"Fetched {len(all_names)} pattern names, now fetching frequencies from Redis...")
 

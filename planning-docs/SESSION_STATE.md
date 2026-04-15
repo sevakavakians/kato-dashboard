@@ -1,15 +1,16 @@
 # Session State
 
-**Last Updated**: 2026-04-03
-**Current Phase**: UI Refactor - Sessions Page Consolidation COMPLETE ✅
-**Session Focus**: Removed standalone Sessions nav item; merged Redis Keys tab into DataBrowser as "Sessions" tab
+**Last Updated**: 2026-04-15
+**Current Phase**: Bug Fix - Pattern Search Server-Side Migration COMPLETE ✅
+**Session Focus**: Fixed pattern search silently returning incomplete results (client-side filter replaced with full ClickHouse database search)
 
 ## Current Status
 
-### Progress: Sessions Page Consolidation - COMPLETE ✅
-Removed standalone Sessions nav item and 495-line Sessions.tsx. Extracted Redis Keys diagnostic tab into
-new SessionsBrowser.tsx component and added it as "Sessions" tab in DataBrowser (2026-04-03).
-637 lines of dead/redundant code removed. Build passing with 0 TypeScript errors.
+### Progress: Pattern Search Bug Fix - COMPLETE (awaiting live test) ✅
+Pattern search in the knowledgebase browser was only filtering the current 20-pattern page instead of querying
+ClickHouse. Fixed 2026-04-15: search propagated through 5 files (ClickHouse ILIKE clause, hybrid layer,
+API route, API client, PatternsPanel debounce). TypeScript compilation passes. Live testing pending.
+Sessions page consolidation previously completed (2026-04-03).
 Knowledgebases page restructure previously completed (2026-03-31).
 Docker versioning and release automation system previously completed (2025-12-17).
 Dashboard v2.0 Phase 4 (Hierarchical Graph) previously completed.
@@ -23,6 +24,18 @@ Pattern editing (Phase 1) COMPLETE. WebSocket phases (1-4) complete. KB deletion
 - Timeline: 9-12 hours estimated, 11.5 hours actual (within target)
 
 ### Current Task
+**Pattern Search Server-Side Migration - COMPLETE ✅ (live testing pending)**
+- Status: Implementation complete, TypeScript errors: 0
+- Root Cause: PatternsPanel applied JS .filter() on fetched page; search never sent to backend
+- Files Modified: 5
+  - backend/app/db/clickhouse.py (ILIKE clause added to query_patterns, get_all_pattern_names, get_pattern_count)
+  - backend/app/db/hybrid_patterns.py (search passed through get_patterns_hybrid and _get_patterns_sorted_by_frequency)
+  - backend/app/api/routes.py (search query parameter added to patterns endpoint)
+  - frontend/src/lib/api.ts (search parameter added to getHybridPatterns)
+  - frontend/src/components/PatternsPanel.tsx (500ms debounce, server-side fetch, removed client-side filter)
+- Completion Archive: /Users/sevakavakians/PROGRAMMING/kato-dashboard/planning-docs/completed/bugs/pattern-search-client-side-to-server-side.md
+
+### Previous Task (COMPLETE)
 **Sessions Page Consolidation - COMPLETE ✅**
 - Status: COMPLETE - Build passes, 0 TypeScript errors ✅
 - Goal: Remove low-value standalone Sessions page; relocate useful Redis Keys tab to DataBrowser

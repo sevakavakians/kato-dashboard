@@ -69,7 +69,8 @@ async def query_patterns(
     skip: int = 0,
     limit: int = 100,
     sort_by: str = 'length',
-    sort_order: str = 'DESC'
+    sort_order: str = 'DESC',
+    search: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     """
     Query patterns from ClickHouse for specific kb_id.
@@ -80,6 +81,7 @@ async def query_patterns(
         limit: Max results per page
         sort_by: Column to sort by (length, name, token_count, created_at)
         sort_order: 'ASC' or 'DESC'
+        search: Optional substring search on pattern name (case-insensitive)
 
     Returns:
         List of pattern dictionaries with ClickHouse fields
@@ -102,6 +104,12 @@ async def query_patterns(
 
     sort_col = sort_fields.get(sort_by, 'length')
 
+    search_clause = ""
+    params = {'kb_id': kb_id, 'limit': limit, 'skip': skip}
+    if search:
+        search_clause = "AND name ILIKE %(search)s"
+        params['search'] = f"%{search}%"
+
     query = f"""
     SELECT
         kb_id,
@@ -118,12 +126,13 @@ async def query_patterns(
         updated_at
     FROM kato.patterns_data
     WHERE kb_id = %(kb_id)s
+    {search_clause}
     ORDER BY {sort_col} {sort_order}
     LIMIT %(limit)s
     OFFSET %(skip)s
     """
 
-    result = client.query(query, parameters={'kb_id': kb_id, 'limit': limit, 'skip': skip})
+    result = client.query(query, parameters=params)
 
     # Convert to list of dicts
     patterns = []
@@ -190,7 +199,7 @@ async def get_pattern_by_name(kb_id: str, pattern_name: str) -> Optional[Dict[st
     }
 
 
-async def get_all_pattern_names(kb_id: str) -> List[str]:
+async def get_all_pattern_names(kb_id: str, search: Optional[str] = None) -> List[str]:
     """
     Get all pattern names for kb_id (efficient, name-only query).
 
@@ -199,14 +208,21 @@ async def get_all_pattern_names(kb_id: str) -> List[str]:
 
     Args:
         kb_id: Knowledge base identifier
+        search: Optional substring search on pattern name (case-insensitive)
 
     Returns:
         List of pattern names (SHA1 hashes)
     """
     client = await get_clickhouse_client()
 
-    query = "SELECT name FROM kato.patterns_data WHERE kb_id = %(kb_id)s ORDER BY name"
-    result = client.query(query, parameters={'kb_id': kb_id})
+    search_clause = ""
+    params = {'kb_id': kb_id}
+    if search:
+        search_clause = "AND name ILIKE %(search)s"
+        params['search'] = f"%{search}%"
+
+    query = f"SELECT name FROM kato.patterns_data WHERE kb_id = %(kb_id)s {search_clause} ORDER BY name"
+    result = client.query(query, parameters=params)
 
     return [row[0] for row in result.result_rows]
 
@@ -226,20 +242,27 @@ async def get_kb_ids() -> List[str]:
     return [row[0] for row in result.result_rows]
 
 
-async def get_pattern_count(kb_id: str) -> int:
+async def get_pattern_count(kb_id: str, search: Optional[str] = None) -> int:
     """
     Get total pattern count for kb_id.
 
     Args:
         kb_id: Knowledge base identifier
+        search: Optional substring search on pattern name (case-insensitive)
 
     Returns:
         Total number of patterns
     """
     client = await get_clickhouse_client()
 
-    query = "SELECT COUNT(*) FROM kato.patterns_data WHERE kb_id = %(kb_id)s"
-    result = client.query(query, parameters={'kb_id': kb_id})
+    search_clause = ""
+    params = {'kb_id': kb_id}
+    if search:
+        search_clause = "AND name ILIKE %(search)s"
+        params['search'] = f"%{search}%"
+
+    query = f"SELECT COUNT(*) FROM kato.patterns_data WHERE kb_id = %(kb_id)s {search_clause}"
+    result = client.query(query, parameters=params)
 
     return result.result_rows[0][0]
 

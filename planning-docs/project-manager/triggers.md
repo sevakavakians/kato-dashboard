@@ -4,6 +4,20 @@ This file records all activation events for the project-manager agent. Used to t
 
 ---
 
+## 2026-04-15 - Task Completion: Pattern Search Server-Side Migration (Bug Fix)
+
+**Trigger Type**: Task Completion (Primary)
+**Event**: Pattern search in knowledgebase browser fixed. Client-side JS .filter() replaced with server-side ClickHouse ILIKE query. Search propagated through 5 files: clickhouse.py, hybrid_patterns.py, routes.py, api.ts, PatternsPanel.tsx. 500ms debounce added. TypeScript compilation passes. Live testing pending.
+**Actions Taken**:
+- Created completion archive in `completed/bugs/pattern-search-client-side-to-server-side.md`
+- Updated SESSION_STATE.md (current phase, current task, progress summary)
+- Updated maintenance-log.md with change record
+- Updated triggers.md (this file)
+**Documentation Files Affected**: 3 updated, 1 created
+**Outcome**: Planning documentation synchronized with completed bug fix
+
+---
+
 ## 2026-04-03 - Task Completion: Sessions Page Consolidation
 
 **Trigger Type**: Task Completion (Primary)

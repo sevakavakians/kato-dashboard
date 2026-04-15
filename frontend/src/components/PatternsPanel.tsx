@@ -12,6 +12,7 @@ interface PatternsPanelProps {
 export default function PatternsPanel({ kbId }: PatternsPanelProps) {
   const [page, setPage] = useState(0)
   const [searchTerm, setSearchTerm] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [selectedPatterns, setSelectedPatterns] = useState<Set<string>>(new Set())
   const [selectedPatternForDetails, setSelectedPatternForDetails] = useState<Pattern | null>(null)
   const [sortBy, setSortBy] = useState<'length' | 'token_count' | 'frequency'>('length')
@@ -23,17 +24,27 @@ export default function PatternsPanel({ kbId }: PatternsPanelProps) {
   useEffect(() => {
     setPage(0)
     setSearchTerm('')
+    setDebouncedSearch('')
     setSelectedPatterns(new Set())
     setSelectedPatternForDetails(null)
   }, [kbId])
+
+  // Debounce search term for server-side search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm)
+      setPage(0)
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [searchTerm])
 
   const getPatternIdentifier = (pattern: Pattern): string => {
     return pattern.name || pattern._id || 'Unknown pattern'
   }
 
   const { data: patternsData, isLoading: patternsLoading, refetch: refetchPatterns } = useQuery({
-    queryKey: ['hybridPatterns', kbId, page, sortBy, sortOrder],
-    queryFn: () => apiClient.getHybridPatterns(kbId, page * pageSize, pageSize, sortBy, sortOrder),
+    queryKey: ['hybridPatterns', kbId, page, sortBy, sortOrder, debouncedSearch],
+    queryFn: () => apiClient.getHybridPatterns(kbId, page * pageSize, pageSize, sortBy, sortOrder, true, debouncedSearch || undefined),
     refetchInterval: 15000,
   })
 
@@ -69,10 +80,6 @@ export default function PatternsPanel({ kbId }: PatternsPanelProps) {
   const total = patternsData?.total || 0
   const totalPages = Math.ceil(total / pageSize)
 
-  const filteredPatterns = patterns.filter((pattern) =>
-    getPatternIdentifier(pattern).toLowerCase().includes(searchTerm.toLowerCase())
-  )
-
   const handleDelete = async (patternName: string) => {
     if (window.confirm('Are you sure you want to delete this pattern?')) {
       await deleteMutation.mutateAsync({ patternName })
@@ -90,10 +97,10 @@ export default function PatternsPanel({ kbId }: PatternsPanelProps) {
   }
 
   const handleToggleAll = () => {
-    if (selectedPatterns.size === filteredPatterns.length) {
+    if (selectedPatterns.size === patterns.length) {
       setSelectedPatterns(new Set())
     } else {
-      setSelectedPatterns(new Set(filteredPatterns.map(p => p.name)))
+      setSelectedPatterns(new Set(patterns.map(p => p.name)))
     }
   }
 
@@ -226,7 +233,7 @@ export default function PatternsPanel({ kbId }: PatternsPanelProps) {
           <div className="p-8 text-center text-gray-500 dark:text-gray-400">
             Loading patterns...
           </div>
-        ) : filteredPatterns.length === 0 ? (
+        ) : patterns.length === 0 ? (
           <div className="p-8 text-center text-gray-500 dark:text-gray-400">
             {searchTerm ? 'No patterns found matching your search' : 'No patterns available'}
           </div>
@@ -239,24 +246,24 @@ export default function PatternsPanel({ kbId }: PatternsPanelProps) {
                   onClick={handleToggleAll}
                   className="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400"
                 >
-                  {selectedPatterns.size === filteredPatterns.length && filteredPatterns.length > 0 ? (
+                  {selectedPatterns.size === patterns.length && patterns.length > 0 ? (
                     <CheckSquare className="w-5 h-5" />
                   ) : (
                     <Square className="w-5 h-5" />
                   )}
                 </button>
                 <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  {selectedPatterns.size === filteredPatterns.length && filteredPatterns.length > 0
+                  {selectedPatterns.size === patterns.length && patterns.length > 0
                     ? 'Deselect All'
                     : 'Select All'
-                  } ({filteredPatterns.length} patterns)
+                  } ({patterns.length} patterns)
                 </span>
               </div>
             </div>
 
             {/* Pattern Rows */}
             <div className="max-h-[600px] overflow-y-auto divide-y divide-gray-200 dark:divide-gray-700">
-              {filteredPatterns.map((pattern) => (
+              {patterns.map((pattern) => (
                 <div key={pattern.name || pattern._id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                   <div className="flex items-center gap-3 p-4">
                     {/* Checkbox */}
